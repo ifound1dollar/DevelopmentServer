@@ -7,6 +7,9 @@ using static ENetServer.NetworkManager;
 
 namespace ENetServer.DataObjects
 {
+    /// <summary>
+    /// Data object containing NON-SERIALIZED game data JUST RECEIVED from the network. Must use Builder to create objects.
+    /// </summary>
     public class GameInDataObject
     {
         public uint PeerID { get; }
@@ -14,16 +17,19 @@ namespace ENetServer.DataObjects
 
         private GameInDataObject(GameInDataObject.Builder builder)
         {
-            PeerID = builder.peerId;
-            TempDataString = builder.tempDataString;
+            PeerID = builder.PeerID;
+            TempDataString = builder.TempDataString;
         }
 
 
 
+        /// <summary>
+        /// Builder used to create new GameInDataObject instances.
+        /// </summary>
         public class Builder
         {
-            internal uint peerId;
-            internal string tempDataString = "";
+            internal uint PeerID { get; private set; }
+            internal string TempDataString { get; private set; } = string.Empty;
 
             public Builder()
             {
@@ -34,17 +40,20 @@ namespace ENetServer.DataObjects
 
             public Builder AddPeerID(uint peerId)
             {
-                this.peerId = peerId;
+                PeerID = peerId;
                 return this;
             }
 
             public Builder AddTempDataString(string tempDataString)
             {
-                this.tempDataString = tempDataString;
+                TempDataString = tempDataString;
                 return this;
             }
 
-
+            /// <summary>
+            /// Constructs and returns a new GameInDataObject with this Builder's data.
+            /// </summary>
+            /// <returns> The newly constructed GameInDataObject. </returns>
             public GameInDataObject Build()
             {
                 return new GameInDataObject(this);

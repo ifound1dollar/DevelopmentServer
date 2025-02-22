@@ -6,8 +6,30 @@ using System.Collections.Concurrent;
 
 namespace ENetServer
 {
+    /// <summary>
+    /// Singleton class that manages all ENet networking operations and serialization/deserialization. Multi-threaded.
+    /// </summary>
     public class NetworkManager
     {
+            // ----- DESCRIPTION ----- //
+        // The NetworkManager class is a singleton that manages a multi-threaded networking system. This system
+        //  manages two separate threads, one for serialization/deserialization and one for networking, which
+        //  work concurrently to break dramatically increase the efficiency of networking tasks.
+        // The main thread should access this class Instance to enqueue and dequeue and network data, never
+        //  directly interacting with either of the running threads. This class strictly prohibits access to
+        //  the running threads, ensuring thread safety and simplicity for developers. 
+        // The two Worker nested classes manage their own specific object instances that perform relevant tasks.
+        //  The Serializer class handles all serialization/deserialization and communication. The Server class
+        //  starts, stops, and runs the ENet host and handles network sending and receiving.
+
+        // The main thread needs only to call the Setup(), StartThreadedOperations(), and StopThreadedOperations()
+        //  methods to manage this class. These methods fully encapsulate all networking operations.
+        // Utilizing the NetworkManager only requires using SendGameDataObject(), ReadOneGameDataObject(),
+        //  and GetConnectedClient() to work with outgoing/incoming network data and with connected clients. The
+        //  main/game thread can focus on working with the game data passed to / received from this class rather
+        //  than handling the actual networking tasks (focus on gameplay and behavior, not networking).
+            // ----- END DESCRIPTION ----- //
+
         #region Singleton Stuff
 
         private static readonly NetworkManager instance = new();
@@ -99,6 +121,8 @@ namespace ENetServer
             Connections.TryGetValue(clientId, out Connection? client);
             return client;
         }
+
+
 
 
 

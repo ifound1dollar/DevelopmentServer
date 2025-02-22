@@ -7,6 +7,9 @@ using static ENetServer.NetHelpers;
 
 namespace ENetServer.DataObjects
 {
+    /// <summary>
+    /// Data object containing NON-SERIALIZED game data TO BE SENT over the network. Must use Builder to create objects.
+    /// </summary>
     public class GameOutDataObject
     {
         public uint PeerID { get; }
@@ -15,18 +18,21 @@ namespace ENetServer.DataObjects
 
         private GameOutDataObject(GameOutDataObject.Builder builder)
         {
-            PeerID = builder.peerId;
-            TempDataString = builder.tempDataString;
-            SendType = builder.sendType;
+            PeerID = builder.PeerID;
+            TempDataString = builder.TempDataString;
+            SendType = builder.SendType;
         }
 
 
 
+        /// <summary>
+        /// Builder used to create new GameOutDataObject instances.
+        /// </summary>
         public class Builder
         {
-            internal uint peerId;
-            internal string tempDataString = "";
-            internal SendType sendType;
+            internal uint PeerID { get; private set; }
+            internal string TempDataString { get; private set; } = string.Empty;
+            internal SendType SendType { get; private set; }
 
             public Builder()
             {
@@ -37,22 +43,26 @@ namespace ENetServer.DataObjects
 
             public Builder AddPeerID(uint peerId)
             {
-                this.peerId = peerId;
+                PeerID = peerId;
                 return this;
             }
 
             public Builder AddTempDataString(string tempDataString)
             {
-                this.tempDataString = tempDataString;
+                TempDataString = tempDataString;
                 return this;
             }
 
             public Builder AddSendType(SendType sendType)
             {
-                this.sendType = sendType;
+                SendType = sendType;
                 return this;
             }
 
+            /// <summary>
+            /// Constructs and returns a new GameOutDataObject with this Builder's data.
+            /// </summary>
+            /// <returns> The newly constructed GameOutDataObject. </returns>
             public GameOutDataObject Build()
             {
                 return new GameOutDataObject(this);
