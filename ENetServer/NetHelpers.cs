@@ -5,8 +5,16 @@ using static ENetServer.NetworkManager;
 
 namespace ENetServer
 {
-    internal static class NetHelpers
+    /// <summary>
+    /// Static class containing enums and methods used for networking operations.
+    /// </summary>
+    public static class NetHelpers
     {
+        public enum SendType { MESSAGE_ONE, MESSAGE_ALL, MESSAGE_ALLEXCEPT, DISCONNECT_ONE, DISCONNECT_ALL }
+        internal enum RecvType { CONNECT, DISCONNECT, TIMEOUT, MESSAGE }
+
+
+
         #region String and Packet Helpers
 
         /// <summary>
@@ -42,53 +50,18 @@ namespace ENetServer
         }
 
         /// <summary>
-        /// Creates a Packet object from the passed-in string. String should be compatible with UTF8.
+        /// Creates a byte[] from the passed-in string, which must be in UTF8 format and include the null terminator \0.
         /// </summary>
-        /// <param name="message"> String to convert to UTF8 byte[] and add to packet. </param>
-        /// <returns> The created packet from the passed-in string. </returns>
-        internal static Packet CreatePacketFromUTF8String(string message)
+        /// <param name="message"> String to convert to byte[]. Must include null terminator \0. </param>
+        /// <returns> The byte[] generated from the string. </returns>
+        internal static byte[] CreateByteArrayFromUTF8String(string message)
         {
-            // Create packet with input string, which should be UTF8 encoded.
             byte[] bytes = Encoding.UTF8.GetBytes(message);
-            Packet packet = default;
-            packet.Create(bytes);
-
-            return packet;
+            return bytes;
         }
 
         #endregion
 
-        #region Data Object creators
-
-        public static GameOutObject CreateGameOutObject(uint peerId, string tempDataString, SendType sendType)
-        {
-            // TEMP
-            return new GameOutObject(peerId, tempDataString, sendType);
-            // TEMP
-        }
-
-        internal static GameInObject CreateGameInObject(uint peerId, string tempSerializedData)
-        {
-            // TEMP
-            return new GameInObject(peerId, tempSerializedData);
-            // TEMP
-        }
-
-        internal static NetworkSendObject CreateNetworkSendObject(uint peerId, Packet packet, SendType sendType)
-        {
-            // TEMP
-            return new NetworkSendObject(peerId, packet, sendType);
-            // TEMP
-        }
-
-        internal static NetworkRecvObject CreateNetworkRecvObject(uint peerId, string peerIP, ushort peerPort, byte[] bytes, RecvType recvType)
-        {
-            // TEMP
-            return new NetworkRecvObject(peerId, peerIP, peerPort, bytes, recvType);
-            // TEMP
-        }
-
-        #endregion
 
 
 
@@ -132,6 +105,23 @@ namespace ENetServer
                 //TEMP
             }
         }
+
+        // DO NOT USE THIS METHOD - THIS MAY CAUSE A MEMORY LEAK BECAUSE THIS PACKET IS NOT MANUALLY DISPOSED BY ENET.
+        /// <summary>
+        /// Creates a Packet object from the passed-in string. String should be compatible with UTF8.
+        /// </summary>
+        /// <param name="message"> String to convert to UTF8 byte[] and add to packet. </param>
+        /// <returns> The created packet from the passed-in string. </returns>
+        private static Packet CreatePacketFromUTF8String(string message)
+        {
+            // Create packet with input string, which should be UTF8 encoded.
+            byte[] bytes = Encoding.UTF8.GetBytes(message);
+            Packet packet = default;
+            packet.Create(bytes);
+
+            return packet;
+        }
+
 
     }
 }

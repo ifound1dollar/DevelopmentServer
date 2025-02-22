@@ -1,4 +1,5 @@
 ﻿using ENet;
+using ENetServer.DataObjects;
 using System.Net;
 
 namespace ENetServer
@@ -61,8 +62,7 @@ namespace ENetServer
         {
             Console.WriteLine("[ACTION] Disconnecting all clients.");
 
-            NetworkManager.GameOutObject gameOutObject = new NetworkManager.GameOutObject(
-                0, "", NetworkManager.SendType.DISCONNECT_ALL);
+            GameOutDataObject gameOutObject = GameOutDataObject.MakeGenericDisconnectAll();
             NetworkManager.Instance.SendGameDataObject(gameOutObject);
         }
 
@@ -74,8 +74,7 @@ namespace ENetServer
         {
             Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
 
-            NetworkManager.GameOutObject gameOutObject = new NetworkManager.GameOutObject(
-                0, message, NetworkManager.SendType.MESSAGE_ALL);
+            GameOutDataObject gameOutObject = GameOutDataObject.MakeGenericMessageAll(message);
             NetworkManager.Instance.SendGameDataObject(gameOutObject);
         }
     }

@@ -5,11 +5,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetServer
+namespace ENetServer.Management
 {
-    public class Client
+    public class Connection
     {
-        public Client(uint id, string ip, ushort port)
+        public Connection(uint id, string ip, ushort port)
         {
             ID = id;
             IP = ip;

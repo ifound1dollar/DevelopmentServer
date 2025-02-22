@@ -1,0 +1,264 @@
+﻿using ENet;
+using ENetServer.DataObjects;
+using ENetServer.Management;
+using System;
+using System.Collections.Concurrent;
+using static ENetServer.NetHelpers;
+
+namespace ENetServer.Serialize
+{
+    /// <summary>
+    /// Encapsulates all serialization/deserialization operations within this class.
+    /// </summary>
+    internal class Serializer
+    {
+        // QUEUE REFERENCES
+        private readonly ConcurrentQueue<GameOutDataObject> gameOutQueue;
+        private readonly ConcurrentQueue<NetworkSendDataObject> netSendQueue;
+        private readonly ConcurrentQueue<GameInDataObject> gameInQueue;
+        private readonly ConcurrentQueue<NetworkRecvDataObject> netRecvQueue;
+        private readonly ConcurrentDictionary<uint, Connection> connectionsDict;
+
+        /// <summary>
+        /// Constructs a Serializer object with references to game AND network concurrent queues.
+        /// </summary>
+        /// <param name="netSendQueue"> Reference to network send queue. </param>
+        /// <param name="netRecvQueue"> Reference to network receive queue. </param>
+        internal Serializer(ConcurrentQueue<GameOutDataObject> gameOutQueue,
+            ConcurrentQueue<NetworkSendDataObject> netSendQueue,
+            ConcurrentQueue<GameInDataObject> gameInQueue,
+            ConcurrentQueue<NetworkRecvDataObject> netRecvQueue,
+            ConcurrentDictionary<uint, Connection> connectionsDict)
+        {
+            this.gameOutQueue = gameOutQueue;
+            this.netSendQueue = netSendQueue;
+            this.gameInQueue = gameInQueue;
+            this.netRecvQueue = netRecvQueue;
+            this.connectionsDict = connectionsDict;
+        }
+
+
+
+        /// <summary>
+        /// Handles game out tasks - read from game out queue, operate on data (serialize), add to network send queue.
+        /// </summary>
+        internal void DoGameToNetTasks()
+        {
+            // Loop until queue is empty.
+            while (!gameOutQueue.IsEmpty)
+            {
+                // Try to dequeue item from serializeQueue, operating on the item if successful.
+                if (!gameOutQueue.TryDequeue(out GameOutDataObject? gameOutObject)) break;
+
+                // Operate based on send type.
+                switch (gameOutObject.SendType)
+                {
+                    case SendType.DISCONNECT_ONE:
+                        {
+                            SendDisconnectOne(gameOutObject);
+                            break;
+                        }
+                    case SendType.DISCONNECT_ALL:
+                        {
+                            SendDisconnectAll();
+                            break;
+                        }
+                    case SendType.MESSAGE_ONE:
+                        {
+                            SendMessageOne(gameOutObject);
+                            break;
+                        }
+                    case SendType.MESSAGE_ALL:
+                        {
+                            SendMessageAll(gameOutObject);
+                            break;
+                        }
+                    case SendType.MESSAGE_ALLEXCEPT:
+                        {
+                            SendMessageAllExcept(gameOutObject);
+                            break;
+                        }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles net receive tasks - read from network receive queue, operate on data (deserialize), add to game in queue.
+        /// </summary>
+        internal void DoNetToGameTasks()
+        {
+            // Loop until net receive queue is empty.
+            while (!netRecvQueue.IsEmpty)
+            {
+                // Try to dequeue item from netRecvQueue, operating on the item if successful.
+                if (!netRecvQueue.TryDequeue(out NetworkRecvDataObject? netReceiveData)) break;
+
+                // Operate based on receive type.
+                switch (netReceiveData.RecvType)
+                {
+                    case RecvType.CONNECT:
+                        {
+                            ReceiveConnect(netReceiveData);
+                            break;
+                        }
+                    case RecvType.DISCONNECT:
+                        {
+                            ReceiveDisconnect(netReceiveData);
+                            break;
+                        }
+                    case RecvType.TIMEOUT:
+                        {
+                            ReceiveTimeout(netReceiveData);
+                            break;
+                        }
+                    case RecvType.MESSAGE:
+                        {
+                            ReceiveMessage(netReceiveData);
+                            break;
+                        }
+                }
+            }
+        }
+
+
+
+        #region Send Methods
+
+        private void SendDisconnectOne(GameOutDataObject gameObject)
+        {
+            NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddPeerID(gameObject.PeerID)
+                .AddBytes([])                           // Not necessary here
+                .AddSendType(SendType.DISCONNECT_ONE)
+                .Build();
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        private void SendDisconnectAll()
+        {
+            NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddPeerID(0)                           // Not necessary here
+                .AddBytes([])                           // Not necessary here
+                .AddSendType(SendType.DISCONNECT_ALL)
+                .Build();
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        private void SendMessageOne(GameOutDataObject gameObject)
+        {
+            // Operate on and SERIALIZE gameObject.
+            string sendString = NetHelpers.FormatStringForSend(gameObject.TempDataString);
+            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(sendString);
+
+            NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddPeerID(gameObject.PeerID)
+                .AddBytes(bytes)
+                .AddSendType(SendType.MESSAGE_ONE)
+                .Build();
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        private void SendMessageAll(GameOutDataObject gameObject)
+        {
+            // Operate on and SERIALIZE gameObject.
+            string sendString = NetHelpers.FormatStringForSend(gameObject.TempDataString);
+            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(sendString);
+
+            NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddPeerID(0)                           // Not necessary here
+                .AddBytes(bytes)
+                .AddSendType(SendType.MESSAGE_ALL)
+                .Build();
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        private void SendMessageAllExcept(GameOutDataObject gameObject)
+        {
+            // Operate on and SERIALIZE gameObject.
+            string sendString = NetHelpers.FormatStringForSend(gameObject.TempDataString);
+            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(sendString);
+
+            NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddPeerID(gameObject.PeerID)
+                .AddBytes(bytes)
+                .AddSendType(SendType.MESSAGE_ALLEXCEPT)
+                .Build();
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        #endregion
+
+        #region Receive Methods
+
+        private void ReceiveConnect(NetworkRecvDataObject recvObject)
+        {
+            // Create new Connection and try to add to Connections dict. If failed to add, disconnect and log failure.
+            Connection connection = new(recvObject.PeerID, recvObject.PeerIP, recvObject.PeerPort);
+            if (!connectionsDict.TryAdd(connection.ID, connection))
+            {
+                // Create and enqueue disconnect request.
+                NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                    .AddPeerID(connection.ID)
+                    .AddBytes([])                           // Not necessary here
+                    .AddSendType(SendType.DISCONNECT_ONE)
+                    .Build();
+                netSendQueue.Enqueue(dataObject);
+
+                // Log connection failure.
+                Console.WriteLine("[ERROR] New connection from " + connection.IP + ":" + connection.Port
+                    + " could not be added to Connections list. Immediately disconnecting.");
+                return;
+            }
+            
+            // Else connection was successful.
+            Console.WriteLine("[CONNECT] Client connected - ID: " + connection.ID +
+                ", Address: " + connection.IP + ":" + connection.Port);
+        }
+
+        private void ReceiveDisconnect(NetworkRecvDataObject recvObject)
+        {
+            // Remove now-disconnected client from Connections dict and log disconnect.
+            connectionsDict.Remove(recvObject.PeerID, out _);   // Discard out parameter
+
+            Console.WriteLine("[DISCONNECT] Client disconnected - ID: " + recvObject.PeerID +
+                ", Address: " + recvObject.PeerIP + ":" + recvObject.PeerPort);
+        }
+
+        private void ReceiveTimeout(NetworkRecvDataObject recvObject)
+        {
+            // Remove now-disconnected client from Connections dict and log disconnect.
+            connectionsDict.Remove(recvObject.PeerID, out _);   // Discard out parameter
+
+            Console.WriteLine("[TIMEOUT] Client timeout - ID: " + recvObject.PeerID +
+                ", Address: " + recvObject.PeerIP + ":" + recvObject.PeerPort);
+
+        }
+
+        private void ReceiveMessage(NetworkRecvDataObject recvObject)
+        {
+            // Operate on and DESERIALIZE netReceiveData.
+            string recvString = NetHelpers.FormatStringFromReceive(recvObject.Bytes);
+
+            // Create GameDataObject after deserializing, then enqueue for game/main thread reading.
+            GameInDataObject dataObject = new GameInDataObject.Builder()
+                .AddPeerID(recvObject.PeerID)
+                .AddTempDataString(recvString)
+                .Build();
+            gameInQueue.Enqueue(dataObject);
+
+
+
+            /// ----- BELOW IS ENTIRELY TEMPORARY, SIMULATING GAME THREAD READING FROM GAME IN QUEUE -----
+            if (!gameInQueue.TryDequeue(out GameInDataObject? tempGameObject)) return;
+
+            // Output incoming data.
+            Console.WriteLine("[MESSAGE] Packet received from - ID: " + tempGameObject.PeerID +
+                                ", Message: " + tempGameObject.TempDataString);
+
+
+
+        }
+
+        #endregion
+    }
+}
