@@ -12,11 +12,11 @@ namespace ENetServer.DataObjects
     /// </summary>
     internal class NetworkRecvDataObject
     {
-        public uint PeerID { get; }
-        public string PeerIP { get; }
-        public ushort PeerPort { get; }
-        public byte[] Bytes { get; }
-        public RecvType RecvType { get; }
+        internal uint PeerID { get; }
+        internal string PeerIP { get; }
+        internal ushort PeerPort { get; }
+        internal byte[] Bytes { get; }
+        internal RecvType RecvType { get; }
 
         private NetworkRecvDataObject(NetworkRecvDataObject.Builder builder)
         {
@@ -32,7 +32,7 @@ namespace ENetServer.DataObjects
         /// <summary>
         /// Builder used to create new NetworkRecvDataObject instances.
         /// </summary>
-        public class Builder
+        internal class Builder
         {
             internal uint PeerID { get; private set; }
             internal string PeerIP { get; private set; } = string.Empty;
@@ -40,38 +40,38 @@ namespace ENetServer.DataObjects
             internal byte[] Bytes { get; private set; } = [];
             internal RecvType RecvType { get; private set; }
 
-            public Builder()
+            internal Builder()
             {
                 // Default constructor
             }
 
 
 
-            public Builder AddPeerID(uint peerId)
+            internal Builder AddPeerID(uint peerId)
             {
                 PeerID = peerId;
                 return this;
             }
 
-            public Builder AddPeerIP(string peerIp)
+            internal Builder AddPeerIP(string peerIp)
             {
                 PeerIP = peerIp;
                 return this;
             }
 
-            public Builder AddPeerPort(ushort peerPort)
+            internal Builder AddPeerPort(ushort peerPort)
             {
                 PeerPort = peerPort;
                 return this;
             }
 
-            public Builder AddBytes(byte[] bytes)
+            internal Builder AddBytes(byte[] bytes)
             {
                 Bytes = bytes;
                 return this;
             }
 
-            public Builder AddRecvType(RecvType recvType)
+            internal Builder AddRecvType(RecvType recvType)
             {
                 RecvType = recvType;
                 return this;
@@ -81,7 +81,7 @@ namespace ENetServer.DataObjects
             /// Constructs and returns a new NetworkRecvDataObject with this Builder's data.
             /// </summary>
             /// <returns> The newly constructed NetworkRecvDataObject. </returns>
-            public NetworkRecvDataObject Build()
+            internal NetworkRecvDataObject Build()
             {
                 return new NetworkRecvDataObject(this);
             }

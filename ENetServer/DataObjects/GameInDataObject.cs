@@ -28,8 +28,8 @@ namespace ENetServer.DataObjects
         /// </summary>
         public class Builder
         {
-            internal uint PeerID { get; private set; }
-            internal string TempDataString { get; private set; } = string.Empty;
+            public uint PeerID { get; private set; }
+            public string TempDataString { get; private set; } = string.Empty;
 
             public Builder()
             {

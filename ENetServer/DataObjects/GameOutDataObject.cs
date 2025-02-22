@@ -30,9 +30,9 @@ namespace ENetServer.DataObjects
         /// </summary>
         public class Builder
         {
-            internal uint PeerID { get; private set; }
-            internal string TempDataString { get; private set; } = string.Empty;
-            internal SendType SendType { get; private set; }
+            public uint PeerID { get; private set; }
+            public string TempDataString { get; private set; } = string.Empty;
+            public SendType SendType { get; private set; }
 
             public Builder()
             {
