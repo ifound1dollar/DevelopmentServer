@@ -40,6 +40,10 @@ namespace ENetServer
                 {
                     ServerDisconnectAllClients();
                 }
+                else if (input == "tr")
+                {
+                    ServerSendTransformToAll(uint.MaxValue, [-6546515611561564564, 2, 3], [4, 5, 6], [7, 8, 9]);
+                }
                 else
                 {
                     ServerBroadcastToAll(input);
@@ -75,6 +79,22 @@ namespace ENetServer
             Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
 
             GameOutDataObject gameOutObject = GameOutDataObject.MakeGenericMessageAll(message);
+            NetworkManager.Instance.SendGameDataObject(gameOutObject);
+        }
+
+        /// <summary>
+        /// Instructs the server to send a transform object to all connected clients.
+        /// </summary>
+        /// <param name="actorId"> ID of Actor corresponding to the transform. </param>
+        /// <param name="location"> Location component of the transform. </param>
+        /// <param name="rotation"> Rotation component of the transform. </param>
+        /// <param name="scale"> Scale component of the transform. </param>
+        public static void ServerSendTransformToAll(uint actorId, double[] location, double[] rotation, double[] scale)
+        {
+            Console.WriteLine("[ACTION] Broadcasting transform {0}, {1}, {2} for actor with ID {3} to all clients.",
+                location.ToString(), rotation.ToString(), scale.ToString(), actorId);
+
+            GameOutDataObject gameOutObject = GameOutDataObject.MakeActorTransformAll(actorId, location, rotation, scale);
             NetworkManager.Instance.SendGameDataObject(gameOutObject);
         }
     }

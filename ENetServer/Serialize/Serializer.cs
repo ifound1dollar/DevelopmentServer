@@ -127,9 +127,8 @@ namespace ENetServer.Serialize
         private void SendDisconnectOne(GameOutDataObject gameObject)
         {
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddPeerID(gameObject.PeerID)
-                .AddBytes([])                           // Not necessary here
                 .AddSendType(SendType.DISCONNECT_ONE)
+                .AddPeerID(gameObject.PeerID)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
@@ -137,8 +136,6 @@ namespace ENetServer.Serialize
         private void SendDisconnectAll()
         {
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddPeerID(0)                           // Not necessary here
-                .AddBytes([])                           // Not necessary here
                 .AddSendType(SendType.DISCONNECT_ALL)
                 .Build();
             netSendQueue.Enqueue(dataObject);
@@ -146,42 +143,38 @@ namespace ENetServer.Serialize
 
         private void SendMessageOne(GameOutDataObject gameObject)
         {
-            // Operate on and SERIALIZE gameObject.
-            string sendString = NetHelpers.FormatStringForSend(gameObject.TempDataString);
-            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(sendString);
+            // Serialize GameOutObject data and return as byte[].
+            byte[] bytes = SerializeGameOutObject(gameObject);
 
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddSendType(SendType.MESSAGE_ONE)
                 .AddPeerID(gameObject.PeerID)
                 .AddBytes(bytes)
-                .AddSendType(SendType.MESSAGE_ONE)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendMessageAll(GameOutDataObject gameObject)
         {
-            // Operate on and SERIALIZE gameObject.
-            string sendString = NetHelpers.FormatStringForSend(gameObject.TempDataString);
-            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(sendString);
+            // Serialize GameOutObject data and return as byte[].
+            byte[] bytes = SerializeGameOutObject(gameObject);
 
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddPeerID(0)                           // Not necessary here
-                .AddBytes(bytes)
                 .AddSendType(SendType.MESSAGE_ALL)
+                .AddBytes(bytes)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendMessageAllExcept(GameOutDataObject gameObject)
         {
-            // Operate on and SERIALIZE gameObject.
-            string sendString = NetHelpers.FormatStringForSend(gameObject.TempDataString);
-            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(sendString);
+            // Serialize GameOutObject data and return as byte[].
+            byte[] bytes = SerializeGameOutObject(gameObject);
 
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
+                .AddSendType(SendType.MESSAGE_ALLEXCEPT)
                 .AddPeerID(gameObject.PeerID)
                 .AddBytes(bytes)
-                .AddSendType(SendType.MESSAGE_ALLEXCEPT)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
@@ -257,6 +250,71 @@ namespace ENetServer.Serialize
 
 
 
+        }
+
+        #endregion
+
+
+
+        #region Serialization Methods
+
+        private static byte[] SerializeGameOutObject(GameOutDataObject dataObject)
+        {
+            byte[] bytes;
+
+            // Switch on DataType, which strictly determines how data is formatted and how it should be interpreted.
+            switch (dataObject.DataType)
+            {
+                case DataType.TEXT:
+                    {
+                        bytes = DoSerializeText(dataObject.String);
+                        break;
+                    }
+                case DataType.TRANSFORM:
+                    {
+                        bytes = DoSerializeTransform(dataObject.UInts, dataObject.Doubles);
+                        break;
+                    }
+                default:    // Also implicitly captures DataType.NONE
+                    {
+                        bytes = []; // Make empty array if no valid DataType.
+                        break;
+                    }
+            }
+
+            // Prepend DataType value as byte to the start of the byte[] so the receiver knows the data type.
+            byte[] finalBytes = new byte[bytes.Length + 1];
+            finalBytes[0] = (byte)dataObject.DataType;
+
+            // Copy serialized data in 'bytes' to return array starting at index 1, leaving first element.
+            bytes.CopyTo(finalBytes, 1);
+
+            //foreach (byte b in finalBytes)
+            //{
+            //    Console.Write(b + " ");
+            //}
+            //Console.WriteLine();
+
+            return finalBytes;
+        }
+
+        private static byte[] DoSerializeText(string inString)
+        {
+            // Format string into net-ready format and convert to raw byte array.
+            string temp = NetHelpers.FormatStringForSend(inString);
+            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(temp);
+
+            return bytes;
+        }
+
+        private static byte[] DoSerializeTransform(uint[] uints, double[] doubles)
+        {
+            // Convert both uints[] and doubles[] into raw byte arrays.
+            byte[] uintArray = NetHelpers.GetBytes(uints);  // Should only be one uint in this array.
+            byte[] doubleArray = NetHelpers.GetBytes(doubles);
+
+            // Returned merged byte arrays.
+            return NetHelpers.MergeByteArrays(uintArray, doubleArray);
         }
 
         #endregion
