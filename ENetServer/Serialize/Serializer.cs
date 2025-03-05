@@ -1,9 +1,10 @@
 ﻿using ENet;
-using ENetServer.DataObjects;
+using ENetServer.NetObjects;
 using ENetServer.Management;
 using System;
 using System.Collections.Concurrent;
 using static ENetServer.NetHelpers;
+using ENetServer.NetObjects.DataObjects;
 
 namespace ENetServer.Serialize
 {
@@ -13,9 +14,9 @@ namespace ENetServer.Serialize
     internal class Serializer
     {
         // QUEUE REFERENCES
-        private readonly ConcurrentQueue<GameOutDataObject> gameOutQueue;
+        private readonly ConcurrentQueue<GameSendObject> gameSendQueue;
         private readonly ConcurrentQueue<NetworkSendDataObject> netSendQueue;
-        private readonly ConcurrentQueue<GameInDataObject> gameInQueue;
+        private readonly ConcurrentQueue<GameRecvObject> gameRecvQueue;
         private readonly ConcurrentQueue<NetworkRecvDataObject> netRecvQueue;
         private readonly ConcurrentDictionary<uint, Connection> connectionsDict;
 
@@ -24,15 +25,15 @@ namespace ENetServer.Serialize
         /// </summary>
         /// <param name="netSendQueue"> Reference to network send queue. </param>
         /// <param name="netRecvQueue"> Reference to network receive queue. </param>
-        internal Serializer(ConcurrentQueue<GameOutDataObject> gameOutQueue,
+        internal Serializer(ConcurrentQueue<GameSendObject> gameSendQueue,
             ConcurrentQueue<NetworkSendDataObject> netSendQueue,
-            ConcurrentQueue<GameInDataObject> gameInQueue,
+            ConcurrentQueue<GameRecvObject> gameRecvQueue,
             ConcurrentQueue<NetworkRecvDataObject> netRecvQueue,
             ConcurrentDictionary<uint, Connection> connectionsDict)
         {
-            this.gameOutQueue = gameOutQueue;
+            this.gameSendQueue = gameSendQueue;
             this.netSendQueue = netSendQueue;
-            this.gameInQueue = gameInQueue;
+            this.gameRecvQueue = gameRecvQueue;
             this.netRecvQueue = netRecvQueue;
             this.connectionsDict = connectionsDict;
         }
@@ -45,37 +46,37 @@ namespace ENetServer.Serialize
         internal void DoGameToNetTasks()
         {
             // Loop until queue is empty.
-            while (!gameOutQueue.IsEmpty)
+            while (!gameSendQueue.IsEmpty)
             {
                 // Try to dequeue item from serializeQueue, operating on the item if successful.
-                if (!gameOutQueue.TryDequeue(out GameOutDataObject? gameOutObject)) break;
+                if (!gameSendQueue.TryDequeue(out GameSendObject? gameSendObject)) break;
 
                 // Operate based on send type.
-                switch (gameOutObject.SendType)
+                switch (gameSendObject.SendType)
                 {
-                    case SendType.DISCONNECT_ONE:
+                    case SendType.Disconnect_One:
                         {
-                            SendDisconnectOne(gameOutObject);
+                            SendDisconnectOne(gameSendObject);
                             break;
                         }
-                    case SendType.DISCONNECT_ALL:
+                    case SendType.Disconnect_All:
                         {
                             SendDisconnectAll();
                             break;
                         }
-                    case SendType.MESSAGE_ONE:
+                    case SendType.Message_One:
                         {
-                            SendMessageOne(gameOutObject);
+                            SendMessageOne(gameSendObject);
                             break;
                         }
-                    case SendType.MESSAGE_ALL:
+                    case SendType.Message_All:
                         {
-                            SendMessageAll(gameOutObject);
+                            SendMessageAll(gameSendObject);
                             break;
                         }
-                    case SendType.MESSAGE_ALLEXCEPT:
+                    case SendType.Message_AllExcept:
                         {
-                            SendMessageAllExcept(gameOutObject);
+                            SendMessageAllExcept(gameSendObject);
                             break;
                         }
                 }
@@ -96,22 +97,22 @@ namespace ENetServer.Serialize
                 // Operate based on receive type.
                 switch (netReceiveData.RecvType)
                 {
-                    case RecvType.CONNECT:
+                    case RecvType.Connect:
                         {
                             ReceiveConnect(netReceiveData);
                             break;
                         }
-                    case RecvType.DISCONNECT:
+                    case RecvType.Disconnect:
                         {
                             ReceiveDisconnect(netReceiveData);
                             break;
                         }
-                    case RecvType.TIMEOUT:
+                    case RecvType.Timeout:
                         {
                             ReceiveTimeout(netReceiveData);
                             break;
                         }
-                    case RecvType.MESSAGE:
+                    case RecvType.Message:
                         {
                             ReceiveMessage(netReceiveData);
                             break;
@@ -124,10 +125,10 @@ namespace ENetServer.Serialize
 
         #region Send Methods
 
-        private void SendDisconnectOne(GameOutDataObject gameObject)
+        private void SendDisconnectOne(GameSendObject gameObject)
         {
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddSendType(SendType.DISCONNECT_ONE)
+                .AddSendType(SendType.Disconnect_One)
                 .AddPeerID(gameObject.PeerID)
                 .Build();
             netSendQueue.Enqueue(dataObject);
@@ -136,43 +137,43 @@ namespace ENetServer.Serialize
         private void SendDisconnectAll()
         {
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddSendType(SendType.DISCONNECT_ALL)
+                .AddSendType(SendType.Disconnect_One)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
 
-        private void SendMessageOne(GameOutDataObject gameObject)
+        private void SendMessageOne(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[] bytes = SerializeGameOutObject(gameObject);
+            byte[] bytes = SerializeGameDataObject(gameObject.GameDataObject);
 
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddSendType(SendType.MESSAGE_ONE)
+                .AddSendType(SendType.Message_One)
                 .AddPeerID(gameObject.PeerID)
                 .AddBytes(bytes)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
 
-        private void SendMessageAll(GameOutDataObject gameObject)
+        private void SendMessageAll(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[] bytes = SerializeGameOutObject(gameObject);
+            byte[] bytes = SerializeGameDataObject(gameObject.GameDataObject);
 
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddSendType(SendType.MESSAGE_ALL)
+                .AddSendType(SendType.Message_All)
                 .AddBytes(bytes)
                 .Build();
             netSendQueue.Enqueue(dataObject);
         }
 
-        private void SendMessageAllExcept(GameOutDataObject gameObject)
+        private void SendMessageAllExcept(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[] bytes = SerializeGameOutObject(gameObject);
+            byte[] bytes = SerializeGameDataObject(gameObject.GameDataObject);
 
             NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
-                .AddSendType(SendType.MESSAGE_ALLEXCEPT)
+                .AddSendType(SendType.Message_AllExcept)
                 .AddPeerID(gameObject.PeerID)
                 .AddBytes(bytes)
                 .Build();
@@ -193,7 +194,7 @@ namespace ENetServer.Serialize
                 NetworkSendDataObject dataObject = new NetworkSendDataObject.Builder()
                     .AddPeerID(connection.ID)
                     .AddBytes([])                           // Not necessary here
-                    .AddSendType(SendType.DISCONNECT_ONE)
+                    .AddSendType(SendType.Disconnect_One)
                     .Build();
                 netSendQueue.Enqueue(dataObject);
 
@@ -230,23 +231,31 @@ namespace ENetServer.Serialize
         private void ReceiveMessage(NetworkRecvDataObject recvObject)
         {
             // Operate on and DESERIALIZE netReceiveData.
-            string recvString = NetHelpers.FormatStringFromReceive(recvObject.Bytes);
+            GameDataObject? gameDataObject = DeserializeGameDataObject(recvObject.Bytes);
 
-            // Create GameDataObject after deserializing, then enqueue for game/main thread reading.
-            GameInDataObject dataObject = new GameInDataObject.Builder()
+            // If gameDataObject is null, there was an error deserializing, so log error and do not enqueue.
+            if (gameDataObject == null)
+            {
+                Console.WriteLine("[ERROR] Received malformed data from peer with ID {0}. Discarding.", recvObject.PeerID);
+                return;
+            }
+
+            // Create GameRecvObject after deserializing, then enqueue for game/main thread reading.
+            GameRecvObject gameRecvObject = new GameRecvObject.Builder()
+                .AddRecvType(RecvType.Message)
                 .AddPeerID(recvObject.PeerID)
-                .AddTempDataString(recvString)
+                .AddGameDataObject(gameDataObject)
                 .Build();
-            gameInQueue.Enqueue(dataObject);
+            gameRecvQueue.Enqueue(gameRecvObject);
 
 
 
             /// ----- BELOW IS ENTIRELY TEMPORARY, SIMULATING GAME THREAD READING FROM GAME IN QUEUE -----
-            if (!gameInQueue.TryDequeue(out GameInDataObject? tempGameObject)) return;
+            if (!gameRecvQueue.TryDequeue(out GameRecvObject? tempRecvObject)) return;
 
             // Output incoming data.
-            Console.WriteLine("[MESSAGE] Packet received from - ID: " + tempGameObject.PeerID +
-                                ", Message: " + tempGameObject.TempDataString);
+            Console.WriteLine("[MESSAGE] Packet received from - ID: " + tempRecvObject.PeerID +
+                                ", Message: " + tempRecvObject.GameDataObject?.GetDescription());
 
 
 
@@ -258,63 +267,39 @@ namespace ENetServer.Serialize
 
         #region Serialization Methods
 
-        private static byte[] SerializeGameOutObject(GameOutDataObject dataObject)
+        private static byte[] SerializeGameDataObject(GameDataObject? dataObject)
         {
+            // Populate initial byte[] with raw data from GameDataObject, or empty array if null.
             byte[] bytes;
-
-            // Switch on DataType, which strictly determines how data is formatted and how it should be interpreted.
-            switch (dataObject.DataType)
+            if (dataObject == null)
             {
-                case DataType.TEXT:
-                    {
-                        bytes = DoSerializeText(dataObject.String);
-                        break;
-                    }
-                case DataType.TRANSFORM:
-                    {
-                        bytes = DoSerializeTransform(dataObject.UInts, dataObject.Doubles);
-                        break;
-                    }
-                default:    // Also implicitly captures DataType.NONE
-                    {
-                        bytes = []; // Make empty array if no valid DataType.
-                        break;
-                    }
+                bytes = [];
+            }
+            else
+            {
+                bytes = dataObject.Serialize(); // Will prepend DataType value within this method.
             }
 
-            // Prepend DataType value as byte to the start of the byte[] so the receiver knows the data type.
-            byte[] finalBytes = new byte[bytes.Length + 1];
-            finalBytes[0] = (byte)dataObject.DataType;
-
-            // Copy serialized data in 'bytes' to return array starting at index 1, leaving first element.
-            bytes.CopyTo(finalBytes, 1);
-
-            //foreach (byte b in finalBytes)
-            //{
-            //    Console.Write(b + " ");
-            //}
-            //Console.WriteLine();
-
-            return finalBytes;
+            // Return the GameDataObject serialized into a raw byte[].
+            return bytes;
         }
 
         private static byte[] DoSerializeText(string inString)
         {
             // Format string into net-ready format and convert to raw byte array.
-            string temp = NetHelpers.FormatStringForSend(inString);
-            byte[] bytes = NetHelpers.CreateByteArrayFromUTF8String(temp);
+            string tempString = NetHelpers.FormatStringForSend(inString);
+            byte[] bytes = NetHelpers.GetBytes(tempString);
 
             return bytes;
         }
 
-        private static byte[] DoSerializeTransform(uint[] uints, double[] doubles)
-        {
-            // Convert both uints[] and doubles[] into raw byte arrays.
-            byte[] uintArray = NetHelpers.GetBytes(uints);  // Should only be one uint in this array.
-            byte[] doubleArray = NetHelpers.GetBytes(doubles);
+        #endregion
 
-            // Returned merged byte arrays.
-            return NetHelpers.MergeByteArrays(uintArray, doubleArray);
+        #region Deserialization Methods
+
+        private static GameDataObject? DeserializeGameDataObject(byte[] bytes)
+        {
+            return GameDataObject.Deserialize(bytes);
         }
 
         #endregion

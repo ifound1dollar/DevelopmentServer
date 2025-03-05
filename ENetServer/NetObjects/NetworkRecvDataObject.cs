@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static ENetServer.NetHelpers;
 
-namespace ENetServer.DataObjects
+namespace ENetServer.NetObjects
 {
     /// <summary>
     /// Data object containing SERIALIZED network data JUST RECEIVED over the network. Must use Builder to create objects.

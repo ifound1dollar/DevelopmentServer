@@ -1,5 +1,5 @@
 ﻿using ENet;
-using ENetServer.DataObjects;
+using ENetServer.NetObjects;
 using ENetServer.Management;
 using ENetServer.Serialize;
 using System.Collections.Concurrent;
@@ -51,8 +51,8 @@ namespace ENetServer
 
 
         // Thread-safe queues for communicating game data between main and serialization/intermediate threads.
-        private ConcurrentQueue<GameOutDataObject> GameOutQueue { get; } = new();
-        private ConcurrentQueue<GameInDataObject> GameInQueue { get; } = new();
+        private ConcurrentQueue<GameSendObject> GameSendQueue { get; } = new();
+        private ConcurrentQueue<GameRecvObject> GameRecvQueue { get; } = new();
 
         // Thread-safe queues for communicating network data between network and serialization/intermediate threads.
         private ConcurrentQueue<NetworkSendDataObject> NetSendQueue { get; } = new();
@@ -104,16 +104,16 @@ namespace ENetServer
 
 
 
-        public void SendGameDataObject(GameOutDataObject gameOutObject)
+        public void EnqueueGameSendObject(GameSendObject gameSendObject)
         {
-            // Queues the passed-in GameOutObject to be processed and sent.
-            GameOutQueue.Enqueue(gameOutObject);
+            // Queues the passed-in GameSendObject to be processed and sent.
+            GameSendQueue.Enqueue(gameSendObject);
         }
 
-        public GameInDataObject? ReadOneGameDataObject()
+        public GameRecvObject? DequeueGameRecvObject()
         {
             // Try to dequeue one, returning the result if successful or null if failed.
-            return GameInQueue.TryDequeue(out GameInDataObject? result) ? result : null;
+            return GameRecvQueue.TryDequeue(out GameRecvObject? result) ? result : null;
         }
 
         public Connection? GetConnectedClient(uint clientId)
@@ -143,8 +143,8 @@ namespace ENetServer
                 thread = new(Run);
 
                 // Startup serializer (but do not begin running).
-                serializer = new Serializer(Instance.GameOutQueue, Instance.NetSendQueue,
-                    Instance.GameInQueue, Instance.NetRecvQueue, Instance.Connections);
+                serializer = new Serializer(Instance.GameSendQueue, Instance.NetSendQueue,
+                    Instance.GameRecvQueue, Instance.NetRecvQueue, Instance.Connections);
             }
 
 

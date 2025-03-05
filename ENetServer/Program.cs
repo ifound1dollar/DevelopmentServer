@@ -1,5 +1,6 @@
 ﻿using ENet;
-using ENetServer.DataObjects;
+using ENetServer.NetObjects;
+using ENetServer.NetObjects.DataObjects;
 using System.Net;
 
 namespace ENetServer
@@ -42,11 +43,11 @@ namespace ENetServer
                 }
                 else if (input == "tr")
                 {
-                    ServerSendTransformToAll(uint.MaxValue, [-6546515611561564564, 2, 3], [4, 5, 6], [7, 8, 9]);
+                    ServerSendTransformToAll(uint.MaxValue, -6546515611561564564, 2, 3);
                 }
                 else
                 {
-                    ServerBroadcastToAll(input);
+                    ServerBroadcastTextToAll(input);
                 }
             }
 
@@ -55,6 +56,11 @@ namespace ENetServer
 
             // Always de-initialize ENet library on application exit.
             ENet.Library.Deinitialize();
+
+            // ALLOWS ANY DIRECT CAST, JUST PRINTS NUMBER - THIS IS WHERE DEFAULT CASE COMES IN
+            //byte bt = 2;
+            //NetHelpers.DataType dataType = (NetHelpers.DataType)bt;
+            //Console.WriteLine(dataType.ToString());
         }
 
 
@@ -66,20 +72,21 @@ namespace ENetServer
         {
             Console.WriteLine("[ACTION] Disconnecting all clients.");
 
-            GameOutDataObject gameOutObject = GameOutDataObject.MakeGenericDisconnectAll();
-            NetworkManager.Instance.SendGameDataObject(gameOutObject);
+            GameSendObject gameSendObject = GameSendObject.MakeDisconnectAll();
+            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
         /// <summary>
         /// Instructs the server to broadcast the passed-in string to all connected clients.
         /// </summary>
         /// <param name="message"> The message string to broadcast. </param>
-        public static void ServerBroadcastToAll(string message)
+        public static void ServerBroadcastTextToAll(string message)
         {
-            Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
+            //Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
 
-            GameOutDataObject gameOutObject = GameOutDataObject.MakeGenericMessageAll(message);
-            NetworkManager.Instance.SendGameDataObject(gameOutObject);
+            ////TODO: IMPLEMENT TextDataObject AND USE HERE (WILL BE SIMPLE)
+            //GameSendObject gameSendObject = GameSendObject.MakeMessageAll(dataObject);
+            //NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
         /// <summary>
@@ -89,13 +96,16 @@ namespace ENetServer
         /// <param name="location"> Location component of the transform. </param>
         /// <param name="rotation"> Rotation component of the transform. </param>
         /// <param name="scale"> Scale component of the transform. </param>
-        public static void ServerSendTransformToAll(uint actorId, double[] location, double[] rotation, double[] scale)
+        public static void ServerSendTransformToAll(uint actorId, double locX, double locY, double locZ)
         {
-            Console.WriteLine("[ACTION] Broadcasting transform {0}, {1}, {2} for actor with ID {3} to all clients.",
-                location.ToString(), rotation.ToString(), scale.ToString(), actorId);
+            Console.WriteLine("[ACTION] Broadcasting location-only transform {0}, {1}, {2} for actor with ID {3} to all clients.",
+                locX, locY, locZ, actorId);
 
-            GameOutDataObject gameOutObject = GameOutDataObject.MakeActorTransformAll(actorId, location, rotation, scale);
-            NetworkManager.Instance.SendGameDataObject(gameOutObject);
+            TransformDataObject transformDataObject = new TransformDataObject.Builder()
+                .FromLocation(actorId, locX, locY, locZ)
+                .Build();
+            GameSendObject gameSendObject = GameSendObject.MakeMessageAll(transformDataObject);
+            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
     }
 }

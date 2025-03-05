@@ -1,5 +1,5 @@
 ﻿using ENet;
-using ENetServer.DataObjects;
+using ENetServer.NetObjects;
 using System;
 using System.Collections.Concurrent;
 using static ENetServer.NetHelpers;
@@ -123,27 +123,27 @@ namespace ENetServer.Management
                 // Operate based on send type.
                 switch (netSendObject.SendType)
                 {
-                    case SendType.DISCONNECT_ONE:
+                    case SendType.Disconnect_One:
                         {
                             QueueDisconnectOne(netSendObject);
                             break;
                         }
-                    case SendType.DISCONNECT_ALL:
+                    case SendType.Disconnect_All:
                         {
                             QueueDisconnectAll();
                             break;
                         }
-                    case SendType.MESSAGE_ONE:
+                    case SendType.Message_One:
                         {
                             QueueSendOne(netSendObject);
                             break;
                         }
-                    case SendType.MESSAGE_ALL:
+                    case SendType.Message_All:
                         {
                             QueueSendAll(netSendObject);
                             break;
                         }
-                    case SendType.MESSAGE_ALLEXCEPT:
+                    case SendType.Message_AllExcept:
                         {
                             QueueSendAllExcept(netSendObject);
                             break;
@@ -338,7 +338,7 @@ namespace ENetServer.Management
                 .AddPeerIP(peer.IP)
                 .AddPeerPort(peer.Port)
                 .AddBytes([])
-                .AddRecvType(RecvType.CONNECT)
+                .AddRecvType(RecvType.Connect)
                 .Build();
             netRecvQueue.Enqueue(dataObject);
         }
@@ -355,7 +355,7 @@ namespace ENetServer.Management
                 .AddPeerIP(peer.IP)
                 .AddPeerPort(peer.Port)
                 .AddBytes([])
-                .AddRecvType(RecvType.DISCONNECT)
+                .AddRecvType(RecvType.Disconnect)
                 .Build();
             netRecvQueue.Enqueue(dataObject);
         }
@@ -372,7 +372,7 @@ namespace ENetServer.Management
                 .AddPeerIP(peer.IP)
                 .AddPeerPort(peer.Port)
                 .AddBytes([])
-                .AddRecvType(RecvType.TIMEOUT)
+                .AddRecvType(RecvType.Timeout)
                 .Build();
             netRecvQueue.Enqueue(dataObject);
         }
@@ -391,7 +391,7 @@ namespace ENetServer.Management
                 .AddPeerIP(peer.IP)
                 .AddPeerPort(peer.Port)
                 .AddBytes(bytes)
-                .AddRecvType(RecvType.MESSAGE)
+                .AddRecvType(RecvType.Message)
                 .Build();
             netRecvQueue.Enqueue(dataObject);
 

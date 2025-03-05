@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ENetServer.NetObjects.DataObjects;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -6,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static ENetServer.NetHelpers;
 
-namespace ENetServer.DataObjects
+namespace ENetServer.NetObjects
 {
     /// <summary>
     /// Data object containing NON-SERIALIZED game data TO BE SENT over the network. Must use Builder to create objects.
@@ -276,7 +277,7 @@ namespace ENetServer.DataObjects
                 // Check whether proper data values are set here.
                 switch (DataType)
                 {
-                    case DataType.TEXT:
+                    case DataType.Text:
                         {
                             // String must be set.
                             if (String != null)
@@ -287,7 +288,7 @@ namespace ENetServer.DataObjects
                             errorMessage = "TEXT DataType requires String value to be set.";
                             return false;
                         }
-                    case DataType.TRANSFORM:
+                    case DataType.Transform:
                         {
                             // UInts must have 1 value (Actor ID) and Doubles must have 9 values (Location, Rotation, Scale).
                             if (UInts != null && UInts.Count == 1
@@ -309,7 +310,7 @@ namespace ENetServer.DataObjects
 
 
 
-        #region Static Ease-of-Use Methods
+        #region Static Template Methods
 
         /// <summary>
         /// Creates a generic 'disconnect all' GameOutDataObject.
@@ -318,7 +319,7 @@ namespace ENetServer.DataObjects
         public static GameOutDataObject MakeGenericDisconnectAll()
         {
             GameOutDataObject dataObject = new Builder()
-                .AddSendType(SendType.DISCONNECT_ALL)
+                .AddSendType(SendType.Disconnect_All)
                 .Build();
             return dataObject;
         }
@@ -331,8 +332,8 @@ namespace ENetServer.DataObjects
         public static GameOutDataObject MakeGenericMessageAll(string message)
         {
             GameOutDataObject dataObject = new Builder()
-                .AddSendType(SendType.MESSAGE_ALL)
-                .AddDataType(DataType.TEXT)
+                .AddSendType(SendType.Message_All)
+                .AddDataType(DataType.Text)
                 .AddString(message)
                 .Build();
             return dataObject;
@@ -349,8 +350,8 @@ namespace ENetServer.DataObjects
         public static GameOutDataObject MakeActorTransformAll(uint actorId, double[] location, double[] rotation, double[] scale)
         {
             GameOutDataObject dataObject = new Builder()
-                .AddSendType(SendType.MESSAGE_ALL)
-                .AddDataType(DataType.TRANSFORM)
+                .AddSendType(SendType.Message_All)
+                .AddDataType(DataType.Transform)
                 .AddUInt(actorId)
                 .AddDoubles(location)
                 .AddDoubles(rotation)

@@ -12,16 +12,8 @@ namespace ENetServer
     /// </summary>
     public static class NetHelpers
     {
-        public enum SendType { MESSAGE_ONE, MESSAGE_ALL, MESSAGE_ALLEXCEPT, DISCONNECT_ONE, DISCONNECT_ALL }
-        internal enum RecvType { CONNECT, DISCONNECT, TIMEOUT, MESSAGE }
-        public enum DataType : byte { NONE, TEXT, TRANSFORM }
-        // NOTE: Adding a new DataType requires modifications in:
-        //  1. Here! Make a new DataType.
-        //  2. Within GameOutDataObject in TWO places: First within CheckIsValid() to verify data is not
-        //      malformed, second by creating a new static template method (i.e. MakeDataTypeMethodName()).
-        //  3. Within Serializer in TWO places: First within SerializeGameOutObject() to properly handle
-        //      the type of data being serialized, and second within DeserializeGameInObject() to do the
-        //      same but in reverse.
+        public enum SendType { None, Disconnect_One, Disconnect_All, Message_One, Message_All, Message_AllExcept }
+        public enum RecvType { None, Connect, Disconnect, Timeout, Message }
 
 
 
@@ -33,7 +25,7 @@ namespace ENetServer
         /// </summary>
         /// <param name="bytes"> Byte array containing raw data from received message. </param>
         /// <returns> The formatted string without the null terminator. </returns>
-        internal static string FormatStringFromReceive(byte[] bytes)
+        public static string FormatStringFromReceive(byte[] bytes)
         {
             // Convert passed-in byte[] into UTF8 string.
             string message = Encoding.UTF8.GetString(bytes);
@@ -49,7 +41,7 @@ namespace ENetServer
         /// </summary>
         /// <param name="message"> Message to format. </param>
         /// <returns> The formatted string with the null terminator \0 as the final character. </returns>
-        internal static string FormatStringForSend(string message)
+        public static string FormatStringForSend(string message)
         {
             // Append the null terminator \0 to the end of the string.
             // C# does not use the null terminator, so strings created here are not suffixed with \0.
@@ -64,41 +56,63 @@ namespace ENetServer
         /// </summary>
         /// <param name="message"> String to convert to byte[]. Must include null terminator \0. </param>
         /// <returns> The byte[] generated from the string. </returns>
-        internal static byte[] CreateByteArrayFromUTF8String(string message)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(message);
-            return bytes;
-        }
+        //public static byte[] CreateByteArrayFromUTF8String(string message)
+        //{
+        //    byte[] bytes = Encoding.UTF8.GetBytes(message);
+        //    return bytes;
+        //}
 
         #endregion
 
         #region Original -> Byte helpers
 
-        internal static byte[] GetBytes(int[] values)
+        public static byte[] GetBytes(int value)
+        {
+            return BitConverter.GetBytes(value);
+        }
+        public static byte[] GetBytes(int[] values)
         {
             byte[] bytes = new byte[values.Length * sizeof(int)];
             Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
             return bytes;
         }
 
-        internal static byte[] GetBytes(uint[] values)
+        public static byte[] GetBytes(uint value)
+        {
+            return BitConverter.GetBytes(value);
+        }
+        public static byte[] GetBytes(uint[] values)
         {
             byte[] bytes = new byte[values.Length * sizeof(uint)];
             Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
             return bytes;
         }
 
-        internal static byte[] GetBytes(float[] values)
+        public static byte[] GetBytes(float value)
+        {
+            return BitConverter.GetBytes(value);
+        }
+        public static byte[] GetBytes(float[] values)
         {
             byte[] bytes = new byte[values.Length * sizeof(float)];
             Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
             return bytes;
         }
 
-        internal static byte[] GetBytes(double[] values)
+        public static byte[] GetBytes(double value)
+        {
+            return BitConverter.GetBytes(value);
+        }
+        public static byte[] GetBytes(double[] values)
         {
             byte[] bytes = new byte[values.Length * sizeof(double)];
             Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+            return bytes;
+        }
+
+        public static byte[] GetBytes(string str)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(str);
             return bytes;
         }
 
@@ -106,39 +120,66 @@ namespace ENetServer
 
         #region Byte -> Original helpers
 
-        internal static int[] GetInts(byte[] values)
+        public static int GetInt(byte[] values, int startIndex)
+        {
+            return BitConverter.ToInt32(values, startIndex);
+        }
+        public static int[] GetInts(byte[] values, int startIndex, int length)
         {
             int[] ints = new int[values.Length / sizeof(int)];
-            Buffer.BlockCopy(values, 0, ints, 0, values.Length);
+            Buffer.BlockCopy(values, startIndex, ints, 0, length);
             return ints;
         }
 
-        internal static uint[] GetUInts(byte[] values)
+        public static uint GetUInt(byte[] values, int startIndex)
+        {
+            return BitConverter.ToUInt32(values, startIndex);   // Always reads exactly four bytes
+        }
+        public static uint[] GetUInts(byte[] values, int startIndex, int length)
         {
             uint[] uints = new uint[values.Length / sizeof(uint)];
-            Buffer.BlockCopy(values, 0, uints, 0, values.Length);
+            Buffer.BlockCopy(values, startIndex, uints, 0, length);
             return uints;
         }
 
-        internal static float[] GetFloats(byte[] values)
+        public static float GetFloat(byte[] values, int startIndex)
+        {
+            return BitConverter.ToSingle(values, startIndex);   // Single is float
+        }
+        public static float[] GetFloats(byte[] values, int startIndex, int length)
         {
             float[] floats = new float[values.Length / sizeof(float)];
-            Buffer.BlockCopy(values, 0, floats, 0, values.Length);
+            Buffer.BlockCopy(values, startIndex, floats, 0, length);
             return floats;
         }
 
-        internal static double[] GetDoubles(byte[] values)
+        public static double GetDouble(byte[] values, int startIndex)
+        {
+            return BitConverter.ToDouble(values, startIndex);
+        }
+        public static double[] GetDoubles(byte[] values, int startIndex, int length)
         {
             double[] doubles = new double[values.Length / sizeof(double)];
-            Buffer.BlockCopy(values, 0, doubles, 0, values.Length);
+            Buffer.BlockCopy(values, startIndex, doubles, 0, length);
             return doubles;
+        }
+
+        public static string GetString(byte[] values, int startIndex, int length)
+        {
+            return Encoding.UTF8.GetString(values, startIndex, length);
         }
 
         #endregion
 
         #region Array helpers
 
-        internal static byte[] MergeByteArrays(byte[] first, byte[] second)
+        /// <summary>
+        /// Merges two byte arrays using Array.Copy().
+        /// </summary>
+        /// <param name="first"> Array to come first in merged byte[]. </param>
+        /// <param name="second"> Array to come second in merged byte[]. </param>
+        /// <returns> The resulting merged byte[]. </returns>
+        public static byte[] MergeTwoByteArrays(byte[] first, byte[] second)
         {
             byte[] bytes = new byte[first.Length + second.Length];
 
@@ -147,6 +188,28 @@ namespace ENetServer
             Array.Copy(second, 0, bytes, first.Length, second.Length);
 
             return bytes;
+        }
+
+        /// <summary>
+        /// Merges multiple byte arrays in order (effectively concatenating) using Array.Copy().
+        /// </summary>
+        /// <param name="bytes"> A series of byte arrays, in order, which will be merged into one array. </param>
+        /// <returns> The resulting merged byte[]. </returns>
+        public static byte[] ConcatByteArrays(params byte[][] bytes)
+        {
+            int position = 0;
+
+            // Use selector to sum the length of each input array, then use to initialize outputArray.
+            byte[] outputArray = new byte[bytes.Sum(a => a.Length)];
+
+            // Loop over each input byte[] and copy to outputArray.
+            foreach (byte[] curr in bytes)
+            {
+                // Copy entirety of curr into outputArray starting at 'position' index if outputArray.
+                Array.Copy(curr, 0, outputArray, position, curr.Length);
+                position += curr.Length;    // Move position to end of just-added 'curr' array.
+            }
+            return outputArray;
         }
 
         #endregion
