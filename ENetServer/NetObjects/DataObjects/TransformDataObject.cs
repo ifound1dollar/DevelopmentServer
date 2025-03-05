@@ -64,11 +64,14 @@ namespace ENetServer.NetObjects.DataObjects
 
             public Builder FromLocation(uint actorId, double locX, double locY, double locZ)
             {
+                TransformType = TransformType.Location;
                 ActorID = actorId;
                 Doubles = [locX, locY, locZ];
 
                 return this;
             }
+
+            //TODO: IMPLEMENT REMAINING TRANSFORM TYPE BUILDER METHODS
 
             public Builder FromByteArray(byte[] bytes)
             {

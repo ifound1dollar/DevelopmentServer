@@ -3,6 +3,8 @@ using ENetServer.NetObjects;
 using ENetServer.Management;
 using ENetServer.Serialize;
 using System.Collections.Concurrent;
+using ENetServer.Network;
+using System.ComponentModel;
 
 namespace ENetServer
 {
@@ -14,20 +16,22 @@ namespace ENetServer
             // ----- DESCRIPTION ----- //
         // The NetworkManager class is a singleton that manages a multi-threaded networking system. This system
         //  manages two separate threads, one for serialization/deserialization and one for networking, which
-        //  work concurrently to break dramatically increase the efficiency of networking tasks.
-        // The main thread should access this class Instance to enqueue and dequeue and network data, never
+        //  work concurrently to dramatically increase the efficiency of networking tasks.
+        // The main thread should access this class Instance to enqueue and dequeue game data, never
         //  directly interacting with either of the running threads. This class strictly prohibits access to
         //  the running threads, ensuring thread safety and simplicity for developers. 
-        // The two Worker nested classes manage their own specific object instances that perform relevant tasks.
-        //  The Serializer class handles all serialization/deserialization and communication. The Server class
-        //  starts, stops, and runs the ENet host and handles network sending and receiving.
+        // The Worker nested classes manage their own specific object instances that perform relevant tasks.
+        //  The Serializer class handles all serialization/deserialization and communication. The Server and
+        //  Client classes start, stop, and run the ENet host and handle network sending and receiving.
 
-        // The main thread needs only to call the Setup(), StartThreadedOperations(), and StopThreadedOperations()
-        //  methods to manage this class. These methods fully encapsulate all networking operations.
-        // Utilizing the NetworkManager only requires using SendGameDataObject(), ReadOneGameDataObject(),
-        //  and GetConnectedClient() to work with outgoing/incoming network data and with connected clients. The
-        //  main/game thread can focus on working with the game data passed to / received from this class rather
-        //  than handling the actual networking tasks (focus on gameplay and behavior, not networking).
+        // The main thread needs only to call the SetupAsClient()/SetupAsServer(), StartThreadedOperations(),
+        //  and StopThreadedOperations() methods to manage this class. These methods fully encapsulate all
+        //  networking operations.
+        // Utilizing the NetworkManager only requires using EnqueueGameSendObject(), DequeueGameRecvObject(),
+        //  and GetConnectedClient() (server only) to work with outgoing/incoming network data and with
+        //  connected clients. The main/game thread can focus on working with the game data passed to /
+        //  received from this class rather than handling the actual networking tasks (focus on gameplay and
+        //  behavior, not networking).
             // ----- END DESCRIPTION ----- //
 
         #region Singleton Stuff
@@ -55,8 +59,8 @@ namespace ENetServer
         private ConcurrentQueue<GameRecvObject> GameRecvQueue { get; } = new();
 
         // Thread-safe queues for communicating network data between network and serialization/intermediate threads.
-        private ConcurrentQueue<NetworkSendDataObject> NetSendQueue { get; } = new();
-        private ConcurrentQueue<NetworkRecvDataObject> NetRecvQueue { get; } = new();
+        private ConcurrentQueue<NetworkSendObject> NetSendQueue { get; } = new();
+        private ConcurrentQueue<NetworkRecvObject> NetRecvQueue { get; } = new();
 
         /// <summary>
         /// Thread-safe Dictionary of all connected clients in form ID:Connection.
@@ -64,18 +68,50 @@ namespace ENetServer
         private ConcurrentDictionary<uint, Connection> Connections { get; set; } = new();
 
         // These are nullable so they can be manually initialized in Setup().
+        private bool isInitialized;
+        private bool isServer;
         private SerializeWorker? serializeWorker;
-        private NetworkWorker? networkWorker;
+        private ServerWorker? serverWorker;
+        private ClientWorker? clientWorker;
 
 
 
         /// <summary>
-        /// Sets up NetworkManager, initializing thread workers.
+        /// Sets up NetworkManager as server, initializing and configuring thread workers.
         /// </summary>
-        public void Setup()
+        public void SetupAsServer()
         {
+            // Throw exception if NetworkManager has already been initialized.
+            if (isInitialized)
+            {
+                string error = isServer ? "Server." : "Client.";
+                throw new InvalidOperationException("NetworkManager already initialized as " + error);
+            }
+
+            isServer = true;
             serializeWorker = new SerializeWorker();
-            networkWorker = new NetworkWorker();
+            serverWorker = new ServerWorker();
+            
+            isInitialized = true;
+        }
+
+        /// <summary>
+        /// Sets up NetworkManager as server, initializing and configuring thread workers.
+        /// </summary>
+        public void SetupAsClient()
+        {
+            // Throw exception if NetworkManager has already been initialized.
+            if (isInitialized)
+            {
+                string error = isServer ? "Server." : "Client.";
+                throw new InvalidOperationException("NetworkManager already initialized as " + error);
+            }
+
+            isServer = false;
+            serializeWorker = new SerializeWorker();
+            clientWorker = new ClientWorker();
+
+            isInitialized = true;
         }
 
         /// <summary>
@@ -84,8 +120,16 @@ namespace ENetServer
         public void StartThreadedOperations()
         {
             // Starts each threaded operation (one for serialization, one for ENet) here.
-            serializeWorker?.StartThread();
-            networkWorker?.StartThread();
+            if (isServer)
+            {
+                serializeWorker?.StartThread();
+                serverWorker?.StartThread();
+            }
+            else
+            {
+                serverWorker?.StartThread();
+                clientWorker?.StartThread();
+            }
         }
 
         /// <summary>
@@ -93,10 +137,18 @@ namespace ENetServer
         /// </summary>
         public void StopThreadedOperations()
         {
-            // Stops each threaded operation gracefully (could do this a couple of ways, but one could
-            //  simply be to effectively copy the current Server implementation, NOT PREFERABLE).
-            networkWorker?.StopThread();
-            serializeWorker?.StopThread();
+            // Stops each threaded operation gracefully.
+            // Starts each threaded operation (one for serialization, one for ENet) here.
+            if (isServer)
+            {
+                serverWorker?.StopThread();
+                serializeWorker?.StopThread();
+            }
+            else
+            {
+                clientWorker?.StopThread();
+                serverWorker?.StopThread();
+            }
 
             // NOTE: NetworkWorker should be stopped first because disconnecting clients will enqueue
             //  disconnect events that should be handled by the serialization thread.
@@ -118,6 +170,12 @@ namespace ENetServer
 
         public Connection? GetConnectedClient(uint clientId)
         {
+            // If this NetworkManager is for the client, return null.
+            if (!isServer)
+            {
+                return null;
+            }
+
             Connections.TryGetValue(clientId, out Connection? client);
             return client;
         }
@@ -191,13 +249,13 @@ namespace ENetServer
         /// <summary>
         /// This class is responsible for managing the Network/ENet thread.
         /// </summary>
-        private class NetworkWorker
+        private class ServerWorker
         {
             private readonly Thread thread;
             private readonly Server server;
             private volatile bool shouldExit = false;
 
-            internal NetworkWorker()
+            internal ServerWorker()
             {
                 // Thread will call the Run() method.
                 thread = new(Run);
@@ -227,7 +285,7 @@ namespace ENetServer
                 // Sets shouldExit to true, which will gracefully exit the threaded loop.
                 shouldExit = true;
 
-                // Wait for the Server.Run() function to return, then join the thread (BLOCKS).
+                // Wait for the Run() function to return, then join the thread (BLOCKS).
                 Console.WriteLine("[EXIT] Waiting for server to shut down...");
                 thread.Join();
                 Console.WriteLine("[EXIT] Server shut down successfully.");
@@ -252,6 +310,73 @@ namespace ENetServer
 
                 // Stop server, waiting at least 3 seconds for all clients to be disconnected properly.
                 server.Stop();
+            }
+        }
+
+        /// <summary>
+        /// This class is responsible for managing the Network/ENet thread.
+        /// </summary>
+        private class ClientWorker
+        {
+            private readonly Thread thread;
+            private readonly Client client;
+            private volatile bool shouldExit = false;
+
+            internal ClientWorker()
+            {
+                // Thread will call the Run() method.
+                thread = new(Run);
+
+                // INITIALIZE ENET CLIENT, BUT DO NOT CREATE HOST YET.
+                client = new Client();              //TODO: implement w/arguments
+                client.SetRemoteHostParameters();   //TODO: implement w/arguments
+            }
+
+
+
+            /// <summary>
+            /// Starts the worker thread, beginning server operations on a separate thread.
+            /// </summary>
+            internal void StartThread()
+            {
+                thread.Start();
+                Console.WriteLine("[STARTUP] Client host attempting to connect to {0}:{1}",
+                    client.GetRemoteAddress().GetIP(), client.GetRemoteAddress().Port);
+            }
+
+            /// <summary>
+            /// Stops the worker thread, waiting for server to shut down before joining and returning.
+            /// </summary>
+            internal void StopThread()
+            {
+                // Sets shouldExit to true, which will gracefully exit the threaded loop.
+                shouldExit = true;
+
+                // Wait for the Run() function to return, then join the thread (BLOCKS).
+                Console.WriteLine("[EXIT] Waiting for client to shut down...");
+                thread.Join();
+                Console.WriteLine("[EXIT] Server shut down successfully.");
+            }
+
+            /// <summary>
+            /// Creates server, then performs ENet networking tasks until 'shouldExit' is true, then stops server.
+            /// </summary>
+            private void Run()
+            {
+                // Start client, attempting to connect to the host at the configured remote Address.
+                client.Start();
+
+                while (!shouldExit)
+                {
+                    // Reads from network send queue, then queues ENet operations.
+                    client.DoNetSendTasks();
+
+                    // Handles ENet events, runs host service, and adds to network receive queue.
+                    client.DoNetReceiveTasks();
+                }
+
+                // Stop client, waiting at least 3 seconds to successfully disconnect from remote host.
+                client.Stop();
             }
         }
 

@@ -20,16 +20,13 @@ namespace ENetServer
         #region String and Packet Helpers
 
         /// <summary>
-        /// Converts byte[] from received packet and converts to a string.
+        /// Formats the passed-in string for use with C#, notably removing the null terminator \0 if it exists.
         /// IMPORTANT: Removes null terminator \0 from the end of the string.
         /// </summary>
-        /// <param name="bytes"> Byte array containing raw data from received message. </param>
+        /// <param name="message"> Message to format. </param>
         /// <returns> The formatted string without the null terminator. </returns>
-        public static string FormatStringFromReceive(byte[] bytes)
+        public static string FormatStringFromReceive(string message)
         {
-            // Convert passed-in byte[] into UTF8 string.
-            string message = Encoding.UTF8.GetString(bytes);
-
             // Remove null terminator from end of string.
             message = message.Trim('\0');
 

@@ -7,11 +7,12 @@ using System.Text;
 using System.Threading.Tasks;
 using static ENetServer.NetHelpers;
 
-namespace ENetServer.NetObjects
+namespace ENetServer.Deprecated
 {
     /// <summary>
     /// Data object containing NON-SERIALIZED game data TO BE SENT over the network. Must use Builder to create objects.
     /// </summary>
+    [Obsolete("Deprecated, use GameSendObject instead.", true)]
     public class GameOutDataObject
     {
         public SendType SendType { get; }
@@ -27,7 +28,7 @@ namespace ENetServer.NetObjects
         public double[]? Doubles { get; }
         public string? String { get; }
 
-        private GameOutDataObject(GameOutDataObject.Builder builder)
+        private GameOutDataObject(Builder builder)
         {
             SendType = builder.SendType;
             PeerID = builder.PeerID;
@@ -300,7 +301,7 @@ namespace ENetServer.NetObjects
                             errorMessage = "TRANSFORM DataType requires 1 UInts value and 9 Doubles values.";
                             return false;
                         }
-                    
+
                 }
 
                 // Will only reach here if DataType is NONE or a case is not caught, so return sendTypeSet.

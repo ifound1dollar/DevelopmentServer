@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ENetServer.NetObjects.DataObjects;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,7 +11,7 @@ namespace ENetServer.NetObjects
     /// <summary>
     /// Data object containing SERIALIZED network data JUST RECEIVED over the network. Must use Builder to create objects.
     /// </summary>
-    internal class NetworkRecvDataObject
+    internal class NetworkRecvObject
     {
         internal uint PeerID { get; }
         internal string PeerIP { get; }
@@ -18,7 +19,7 @@ namespace ENetServer.NetObjects
         internal byte[] Bytes { get; }
         internal RecvType RecvType { get; }
 
-        private NetworkRecvDataObject(NetworkRecvDataObject.Builder builder)
+        private NetworkRecvObject(NetworkRecvObject.Builder builder)
         {
             PeerID = builder.PeerID;
             PeerIP = builder.PeerIP;
@@ -47,33 +48,40 @@ namespace ENetServer.NetObjects
 
 
 
-            internal Builder AddPeerID(uint peerId)
+            public Builder FromConnect(uint peerId, string peerIp, ushort peerPort)
             {
+                RecvType = RecvType.Connect;
                 PeerID = peerId;
-                return this;
-            }
-
-            internal Builder AddPeerIP(string peerIp)
-            {
                 PeerIP = peerIp;
-                return this;
-            }
-
-            internal Builder AddPeerPort(ushort peerPort)
-            {
                 PeerPort = peerPort;
                 return this;
             }
 
-            internal Builder AddBytes(byte[] bytes)
+            public Builder FromDisconnect(uint peerId, string peerIp, ushort peerPort)
             {
-                Bytes = bytes;
+                RecvType = RecvType.Disconnect;
+                PeerID = peerId;
+                PeerIP = peerIp;
+                PeerPort = peerPort;
                 return this;
             }
 
-            internal Builder AddRecvType(RecvType recvType)
+            public Builder FromTimeout(uint peerId, string peerIp, ushort peerPort)
             {
-                RecvType = recvType;
+                RecvType = RecvType.Timeout;
+                PeerID = peerId;
+                PeerIP = peerIp;
+                PeerPort = peerPort;
+                return this;
+            }
+
+            public Builder FromMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes)
+            {
+                RecvType = RecvType.Message;
+                PeerID = peerId;
+                PeerIP = peerIp;
+                PeerPort = peerPort;
+                Bytes = bytes;
                 return this;
             }
 
@@ -81,9 +89,9 @@ namespace ENetServer.NetObjects
             /// Constructs and returns a new NetworkRecvDataObject with this Builder's data.
             /// </summary>
             /// <returns> The newly constructed NetworkRecvDataObject. </returns>
-            internal NetworkRecvDataObject Build()
+            internal NetworkRecvObject Build()
             {
-                return new NetworkRecvDataObject(this);
+                return new NetworkRecvObject(this);
             }
         }
     }

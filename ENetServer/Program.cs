@@ -22,7 +22,8 @@ namespace ENetServer
             }
 
             // Setup NetworkManager and start networking threads.
-            NetworkManager.Instance.Setup();
+            NetworkManager.Instance.SetupAsServer();
+            //NetworkManager.Instance.SetupAsClient();
             NetworkManager.Instance.StartThreadedOperations();
 
             // Main thread input loop.
@@ -51,16 +52,11 @@ namespace ENetServer
                 }
             }
 
-            // After loop exits, stop the worker thread.
+            // After loop exits, stop the worker thread (blocks here).
             NetworkManager.Instance.StopThreadedOperations();
 
             // Always de-initialize ENet library on application exit.
             ENet.Library.Deinitialize();
-
-            // ALLOWS ANY DIRECT CAST, JUST PRINTS NUMBER - THIS IS WHERE DEFAULT CASE COMES IN
-            //byte bt = 2;
-            //NetHelpers.DataType dataType = (NetHelpers.DataType)bt;
-            //Console.WriteLine(dataType.ToString());
         }
 
 
@@ -72,7 +68,9 @@ namespace ENetServer
         {
             Console.WriteLine("[ACTION] Disconnecting all clients.");
 
-            GameSendObject gameSendObject = GameSendObject.MakeDisconnectAll();
+            GameSendObject gameSendObject = new GameSendObject.Builder()
+                .ForDisconnectAll()
+                .Build();
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -82,11 +80,15 @@ namespace ENetServer
         /// <param name="message"> The message string to broadcast. </param>
         public static void ServerBroadcastTextToAll(string message)
         {
-            //Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
+            Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
 
-            ////TODO: IMPLEMENT TextDataObject AND USE HERE (WILL BE SIMPLE)
-            //GameSendObject gameSendObject = GameSendObject.MakeMessageAll(dataObject);
-            //NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            GameDataObject gameDataObject = new TextDataObject.Builder()
+                .FromString(message)
+                .Build();
+            GameSendObject gameSendObject = new GameSendObject.Builder()
+                .ForMessageAll(gameDataObject)
+                .Build();
+            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
         /// <summary>
@@ -101,10 +103,13 @@ namespace ENetServer
             Console.WriteLine("[ACTION] Broadcasting location-only transform {0}, {1}, {2} for actor with ID {3} to all clients.",
                 locX, locY, locZ, actorId);
 
+            // Build GameDataObject, then build GameSendObject and enqueue.
             TransformDataObject transformDataObject = new TransformDataObject.Builder()
                 .FromLocation(actorId, locX, locY, locZ)
                 .Build();
-            GameSendObject gameSendObject = GameSendObject.MakeMessageAll(transformDataObject);
+            GameSendObject gameSendObject = new GameSendObject.Builder()
+                .ForMessageAll(transformDataObject)
+                .Build();
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
     }

@@ -11,17 +11,17 @@ namespace ENetServer.NetObjects
     /// <summary>
     /// Data object containing SERIALIZED network data TO BE SENT over the network. Must use Builder to create objects.
     /// </summary>
-    internal class NetworkSendDataObject
+    internal class NetworkSendObject
     {
+        internal SendType SendType { get; }
         internal uint PeerID { get; }
         internal byte[] Bytes { get; }
-        internal SendType SendType { get; }
 
-        private NetworkSendDataObject(NetworkSendDataObject.Builder builder)
+        private NetworkSendObject(NetworkSendObject.Builder builder)
         {
+            SendType = builder.SendType;
             PeerID = builder.PeerID;
             Bytes = builder.Bytes;
-            SendType = builder.SendType;
         }
 
 
@@ -31,9 +31,9 @@ namespace ENetServer.NetObjects
         /// </summary>
         internal class Builder
         {
+            internal SendType SendType { get; private set; }
             internal uint PeerID { get; private set; }
             internal byte[] Bytes { get; private set; } = [];
-            internal SendType SendType { get; private set; }
 
             internal Builder()
             {
@@ -42,21 +42,39 @@ namespace ENetServer.NetObjects
 
 
 
-            internal Builder AddPeerID(uint peerId)
+            internal Builder ForDisconnectOne(uint peerId)
             {
+                SendType = SendType.Disconnect_One;
                 PeerID = peerId;
                 return this;
             }
 
-            internal Builder AddBytes(byte[] bytes)
+            internal Builder ForDisconnectAll()
             {
+                SendType = SendType.Disconnect_All;
+                return this;
+            }
+
+            internal Builder ForMessageOne(uint peerId, byte[] bytes)
+            {
+                SendType = SendType.Message_One;
+                PeerID = peerId;
                 Bytes = bytes;
                 return this;
             }
 
-            internal Builder AddSendType(SendType sendType)
+            internal Builder ForMessageAll(byte[] bytes)
             {
-                SendType = sendType;
+                SendType = SendType.Message_All;
+                Bytes = bytes;
+                return this;
+            }
+
+            internal Builder ForMessageAllExcept(uint peerId, byte[] bytes)
+            {
+                SendType = SendType.Message_AllExcept;
+                PeerID = peerId;
+                Bytes = bytes;
                 return this;
             }
 
@@ -64,9 +82,9 @@ namespace ENetServer.NetObjects
             /// Constructs and returns a new NetworkSendDataObject with this Builder's data.
             /// </summary>
             /// <returns> The newly constructed NetworkSendDataObject. </returns>
-            internal NetworkSendDataObject Build()
+            internal NetworkSendObject Build()
             {
-                return new NetworkSendDataObject(this);
+                return new NetworkSendObject(this);
             }
         }
     }

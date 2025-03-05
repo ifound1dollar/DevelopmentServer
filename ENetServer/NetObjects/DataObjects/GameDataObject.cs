@@ -12,13 +12,13 @@ namespace ENetServer.NetObjects.DataObjects
         Text = 1,
         Transform = 2,
     }
-    // NOTE: Adding a new DataType requires modifications in:
+    // NOTE: Adding a new DataType requires a few operations:
     //  1. Here! Make a new DataType.
-    //  2. Within GameOutDataObject in TWO places: First within CheckIsValid() to verify data is not
-    //      malformed, second by creating a new static template method (i.e. MakeDataTypeMethodName()).
-    //  3. Within Serializer in TWO places: First within SerializeGameOutObject() to properly handle
-    //      the type of data being serialized, and second within DeserializeGameInObject() to do the
-    //      same but in reverse.
+    //  2. Below within Deserialize(), building a GameDataObject of the proper class via switch on
+    //      DataType.
+    //  3. Create a new subclass of GameDataObject which corresponds to the new DataType. This must
+    //      implement abstract methods and a Builder to instantiate, serialize, and deserialize
+    //      objects of this new corresponding DataType.
 
 
 
@@ -47,7 +47,9 @@ namespace ENetServer.NetObjects.DataObjects
             {
                 case DataType.Text:
                     {
-                        return null;    // TODO: IMPLEMENT TEXT OBJECT
+                        return new TextDataObject.Builder()
+                            .FromByteArray(bytes)
+                            .Build();
                     }
                 case DataType.Transform:
                     {

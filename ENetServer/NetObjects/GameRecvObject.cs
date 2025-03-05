@@ -4,13 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static ENetServer.NetHelpers;
 
 namespace ENetServer.NetObjects
 {
     public class GameRecvObject
     {
         public uint PeerID { get; }
-        public NetHelpers.RecvType RecvType { get; }
+        public RecvType RecvType { get; }
         public GameDataObject? GameDataObject { get; }
 
         private GameRecvObject(GameRecvObject.Builder builder)
@@ -28,7 +29,7 @@ namespace ENetServer.NetObjects
         public class Builder
         {
             public uint PeerID { get; private set; }
-            public NetHelpers.RecvType RecvType { get; private set; }
+            public RecvType RecvType { get; private set; }
             public GameDataObject? GameDataObject { get; private set; }
 
             public Builder()
@@ -38,21 +39,32 @@ namespace ENetServer.NetObjects
 
 
 
-            public Builder AddPeerID(uint peerId)
+            public Builder FromConnect(uint peerId)
             {
+                RecvType = RecvType.Connect;
                 PeerID = peerId;
                 return this;
             }
 
-            public Builder AddRecvType(NetHelpers.RecvType recvType)
+            public Builder FromDisconnect(uint peerId)
             {
-                RecvType = recvType;
+                RecvType = RecvType.Disconnect;
+                PeerID = peerId;
                 return this;
             }
 
-            public Builder AddGameDataObject(GameDataObject? dataObject)
+            public Builder FromTimeout(uint peerId)
             {
-                GameDataObject = dataObject;
+                RecvType = RecvType.Timeout;
+                PeerID = peerId;
+                return this;
+            }
+
+            public Builder FromMessage(uint peerId, GameDataObject? gameDataObject)
+            {
+                RecvType = RecvType.Message;
+                PeerID = peerId;
+                GameDataObject = gameDataObject;
                 return this;
             }
 
