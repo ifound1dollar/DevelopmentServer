@@ -14,11 +14,11 @@ namespace ENetServer.NetObjects.DataObjects
     }
     // NOTE: Adding a new DataType requires a few operations:
     //  1. Here! Make a new DataType.
-    //  2. Below within Deserialize(), building a GameDataObject of the proper class via switch on
-    //      DataType.
+    //  2. Below within Deserialize(), creating a new GameDataObject of the proper class via switch
+    //      on DataType enum.
     //  3. Create a new subclass of GameDataObject which corresponds to the new DataType. This must
-    //      implement abstract methods and a Builder to instantiate, serialize, and deserialize
-    //      objects of this new corresponding DataType.
+    //      implement abstract methods and a static Factory with methods to create instances via
+    //      default data and deserialization.
 
 
 
@@ -27,39 +27,41 @@ namespace ENetServer.NetObjects.DataObjects
         // This readonly Property uses primary constructor - subclasses call base(DataType.whatever) to set this on construction.
         public DataType DataType { get; } = dataType;
 
-        // This method will be overridden by each subclass to implement proper serialization.
+
+
         public abstract byte[] Serialize();
         public abstract string GetDescription();
 
 
 
         /// <summary>
-        /// Attemps to deserializes a byte[] into a valid GameDataObject instance.
+        /// Attemps to deserialize a byte[] into a valid GameDataObject instance. User should
+        ///  verify success immediately after calling this method.
         /// </summary>
-        /// <param name="bytes"> The byte[] to try to deserialize. </param>
-        /// <returns> The deserialized GameDataObject, or null if unsuccessful. </returns>
+        /// <param name="bytes"> The byte[] attempting to be deserialized. </param>
+        /// <returns> The deserialized GameDataObject, or null if unsuccessful (malformed byte[]). </returns>
         public static GameDataObject? Deserialize(byte[] bytes)
         {
             // Directly cast first byte in byte[] to DataType (if data is correctly formatted, this is fine).
             DataType dataType = (DataType)bytes[0];
 
+            GameDataObject? dataObject = null;
             switch (dataType)
             {
                 case DataType.Text:
                     {
-                        return new TextDataObject.Builder()
-                            .FromByteArray(bytes)
-                            .Build();
+                        dataObject = TextDataObject.Factory.CreateFromDeserialize(bytes);
+                        break;
                     }
                 case DataType.Transform:
                     {
-                        return new TransformDataObject(bytes);
+                        dataObject = TransformDataObject.Factory.CreateFromDeserialize(bytes);
+                        break;
                     }
             }
 
-            // In the case of DataType.None or default (IMPLICITLY REACHES HERE), return null.
-            //Console.WriteLine("[ERROR] Received byte[] contains malformed DataType byte.");
-            return null;
+            // DataType.None or default cases are implicitly caught here - GameDataObject remains null.
+            return dataObject;
         }
     }
 }

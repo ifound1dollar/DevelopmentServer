@@ -30,29 +30,31 @@ namespace ENetServer
                 NetworkManager.Instance.StartThreadedOperations();
 
                 // Main thread input loop.
-                string? input;
+                string? inputRaw;
+                string? inputLower;
                 while (true)
                 {
                     Console.Write("> ");
-                    input = Console.ReadLine()?.ToLower();
-                    if (input == null) break;
+                    inputRaw = Console.ReadLine();
+                    if (inputRaw == null) break;
+                    inputLower = inputRaw.ToLower();
 
                     // Operate on input here, separate thread from server thread.
-                    if (input == "exit" || input == "e")
+                    if (inputLower == "exit" || inputLower == "e")
                     {
                         break;
                     }
-                    else if (input == "dc")
+                    else if (inputLower == "dc")
                     {
                         ServerDisconnectAllClients();
                     }
-                    else if (input == "tr")
+                    else if (inputLower == "tr")
                     {
                         ServerSendTransformToAll(uint.MaxValue, -6546515611561564564, 2, 3);
                     }
                     else
                     {
-                        ServerBroadcastTextToAll(input);
+                        ServerBroadcastTextToAll(inputRaw);
                     }
 
                     // Thread.Sleep() here for a short time to allow operations to complete before allowing new input.
@@ -99,9 +101,12 @@ namespace ENetServer
         {
             Console.WriteLine("[ACTION] Broadcasting message \"" + message + "\" to all clients.");
 
-            GameDataObject gameDataObject = new TextDataObject.Builder()
-                .FromString(message)
-                .Build();
+            GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(message);
+            if (gameDataObject == null)
+            {
+                Console.WriteLine("[ERROR] Failed to create TextDataObject. Aborting.");
+            }
+
             GameSendObject gameSendObject = new GameSendObject.Builder()
                 .ForMessageAll(gameDataObject)
                 .Build();
@@ -121,9 +126,15 @@ namespace ENetServer
                 locX, locY, locZ, actorId);
 
             // Build GameDataObject, then build GameSendObject and enqueue.
-            TransformDataObject transformDataObject = new(actorId, [locX, locY, locZ]);
+            GameDataObject? gameDataObject = TransformDataObject.Factory.CreateFromDefault(actorId,
+                [locX, locY, locZ, 0.0d, 0.0d, 0.0d, 1.0d, 1.0d, 1.0d]);
+            if (gameDataObject == null)
+            {
+                Console.WriteLine("[ERROR] Failed to create TransformDataObject. Aborting.");
+            }
+
             GameSendObject gameSendObject = new GameSendObject.Builder()
-                .ForMessageAll(transformDataObject)
+                .ForMessageAll(gameDataObject)
                 .Build();
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }

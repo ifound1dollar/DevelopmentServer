@@ -144,7 +144,12 @@ namespace ENetServer.Serialize
         private void SendMessageOne(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[] bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            byte[]? bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            if (bytes == null)
+            {
+                Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                return;
+            }
 
             NetworkSendObject dataObject = new NetworkSendObject.Builder()
                 .ForMessageOne(gameObject.PeerID, bytes)
@@ -155,7 +160,12 @@ namespace ENetServer.Serialize
         private void SendMessageAll(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[] bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            byte[]? bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            if (bytes == null)
+            {
+                Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                return;
+            }
 
             NetworkSendObject dataObject = new NetworkSendObject.Builder()
                 .ForMessageAll(bytes)
@@ -165,8 +175,13 @@ namespace ENetServer.Serialize
 
         private void SendMessageAllExcept(GameSendObject gameObject)
         {
-            // Serialize GameOutObject data and return as byte[].
-            byte[] bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            // Serialize GameOutObject data and return as byte[]. If empty array, log failure and return.
+            byte[]? bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            if (bytes == null)
+            {
+                Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                return;
+            }
 
             NetworkSendObject dataObject = new NetworkSendObject.Builder()
                 .ForMessageAllExcept(gameObject.PeerID, bytes)
@@ -222,13 +237,11 @@ namespace ENetServer.Serialize
 
         private void ReceiveMessage(NetworkRecvObject recvObject)
         {
-            // Operate on and DESERIALIZE netReceiveData.
-            GameDataObject? gameDataObject = DeserializeGameDataObject(recvObject.Bytes);
-
-            // If gameDataObject is null, there was an error deserializing, so log error and do not enqueue.
+            // Attempt to deserialize received byte[] into GameDataObject. Log error and return if failure.
+            GameDataObject? gameDataObject = GameDataObject.Deserialize(recvObject.Bytes);
             if (gameDataObject == null)
             {
-                Console.WriteLine("[ERROR] Received malformed data from peer with ID {0}. Discarding.", recvObject.PeerID);
+                Console.WriteLine("[ERROR] Failed to deserialize data received from peer ID {0}. Discarding.", recvObject.PeerID);
                 return;
             }
 
@@ -257,18 +270,22 @@ namespace ENetServer.Serialize
 
         #region Serialization Methods
 
-        private static byte[] SerializeGameDataObject(GameDataObject? dataObject)
+        /// <summary>
+        /// Attempts to serialize the passed-in GameDataObject into a byte[]. User should
+        ///  verify success immediately after calling this method.
+        /// </summary>
+        /// <param name="dataObject"> The GameDataObject attempting to be serialized. May be null. </param>
+        /// <returns> The serialized GameDataObject as a byte[], or null if unsuccessful (null argument). </returns>
+        private static byte[]? SerializeGameDataObject(GameDataObject? dataObject)
         {
-            // Populate initial byte[] with raw data from GameDataObject, or empty array if null.
-            byte[] bytes;
+            // Return null if argument GameDataObject is null.
             if (dataObject == null)
             {
-                bytes = [];
+                return null;
             }
-            else
-            {
-                bytes = dataObject.Serialize(); // Will prepend DataType value within this method.
-            }
+
+            // If argument GameDataObject is not null, serialize into byte[].
+            byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
 
             // TEMP
             foreach (byte b in bytes)
@@ -280,15 +297,6 @@ namespace ENetServer.Serialize
 
             // Return the GameDataObject serialized into a raw byte[].
             return bytes;
-        }
-
-        #endregion
-
-        #region Deserialization Methods
-
-        private static GameDataObject? DeserializeGameDataObject(byte[] bytes)
-        {
-            return GameDataObject.Deserialize(bytes);
         }
 
         #endregion

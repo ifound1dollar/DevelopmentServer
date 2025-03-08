@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static ENetServer.NetObjects.DataObjects.TransformDataObject;
 
 namespace ENetServer.NetObjects.DataObjects
 {
@@ -11,9 +10,9 @@ namespace ENetServer.NetObjects.DataObjects
     {
         public string String { get; }
 
-        private TextDataObject(Builder builder) : base(DataType.Text)
+        private TextDataObject(string str) : base(DataType.Text)
         {
-            String = builder.String;
+            String = str;
         }
 
 
@@ -37,37 +36,46 @@ namespace ENetServer.NetObjects.DataObjects
 
 
         /// <summary>
-        /// This Builder is required to create objects of this class. Allows building from raw data or
-        ///  deserializing from a byte array.
+        /// Factory responsible for creating TextDataObjects. Allows creating from default/raw
+        ///  data or by deserializing from byte array.
         /// </summary>
-        public class Builder
+        public static class Factory
         {
-            public string String { get; private set; } = string.Empty;
-
-            public Builder()
+            /// <summary>
+            /// Attemps to create and return a new TextDataObject from default/raw data. User should
+            ///  verify success immediately after calling this method.
+            /// </summary>
+            /// <param name="str"> Text to be contained in the TextDataObject. Must not be null or empty. </param>
+            /// <returns> The newly created TextDataObject, or null if unsuccessful (invalid argument). </returns>
+            public static TextDataObject? CreateFromDefault(string str)
             {
-                // Default constructor
+                // Validate argument data. String should not be null or empty.
+                if (string.IsNullOrEmpty(str))
+                {
+                    return null;
+                }
+
+                string temp = NetHelpers.FormatStringForSend(str);
+                return new TextDataObject(temp);
             }
 
-
-
-            public Builder FromString(string str)
+            /// <summary>
+            /// Attempts to create and return a new TextDataObject by deserializing from a byte[]. User should
+            ///  verify success immediately after calling this method.
+            /// </summary>
+            /// <param name="bytes"> Raw byte[] containing serialized TextDataObject data. Must correctly formatted. </param>
+            /// <returns> The newly created TextDataObject, or null if unsuccessful (argument byte[] is malformed). </returns>
+            public static TextDataObject? CreateFromDeserialize(byte[] bytes)
             {
-                String = NetHelpers.FormatStringForSend(str);
-                return this;
-            }
+                // Validate argument data. 1 byte for DataType, must be at least 1 byte for actual string data.
+                if (bytes.Length < 2)
+                {
+                    return null;
+                }
 
-            public Builder FromByteArray(byte[] bytes)
-            {
                 string tempString = NetHelpers.GetString(bytes, 0, bytes.Length);
-                String = NetHelpers.FormatStringFromReceive(tempString);
-
-                return this;
-            }
-
-            public TextDataObject Build()
-            {
-                return new TextDataObject(this);
+                tempString = NetHelpers.FormatStringForSend(tempString);
+                return new TextDataObject(tempString);
             }
         }
     }
