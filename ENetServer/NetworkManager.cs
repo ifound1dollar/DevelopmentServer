@@ -13,7 +13,7 @@ namespace ENetServer
     /// </summary>
     public class NetworkManager
     {
-            // ----- DESCRIPTION ----- //
+        // ----- DESCRIPTION ----- //
         // The NetworkManager class is a singleton that manages a multi-threaded networking system. This system
         //  manages two separate threads, one for serialization/deserialization and one for networking, which
         //  work concurrently to dramatically increase the efficiency of networking tasks.
@@ -32,7 +32,9 @@ namespace ENetServer
         //  connected clients. The main/game thread can focus on working with the game data passed to /
         //  received from this class rather than handling the actual networking tasks (focus on gameplay and
         //  behavior, not networking).
-            // ----- END DESCRIPTION ----- //
+        // ----- END DESCRIPTION ----- //
+
+        public enum State { Uninitialized, Initialized, Running, Stopped }
 
         #region Singleton Stuff
 
@@ -68,11 +70,12 @@ namespace ENetServer
         private ConcurrentDictionary<uint, Connection> Connections { get; set; } = new();
 
         // These are nullable so they can be manually initialized in Setup().
-        private bool isInitialized;
-        private bool isServer;
         private SerializeWorker? serializeWorker;
         private ServerWorker? serverWorker;
         private ClientWorker? clientWorker;
+
+        private bool isServer;
+        private State state;
 
 
 
@@ -82,7 +85,7 @@ namespace ENetServer
         public void SetupAsServer()
         {
             // Throw exception if NetworkManager has already been initialized.
-            if (isInitialized)
+            if (state != State.Uninitialized)
             {
                 string error = isServer ? "Server." : "Client.";
                 throw new InvalidOperationException("NetworkManager already initialized as " + error);
@@ -91,8 +94,8 @@ namespace ENetServer
             isServer = true;
             serializeWorker = new SerializeWorker();
             serverWorker = new ServerWorker();
-            
-            isInitialized = true;
+
+            state = State.Initialized;
         }
 
         /// <summary>
@@ -101,7 +104,7 @@ namespace ENetServer
         public void SetupAsClient()
         {
             // Throw exception if NetworkManager has already been initialized.
-            if (isInitialized)
+            if (state != State.Uninitialized)
             {
                 string error = isServer ? "Server." : "Client.";
                 throw new InvalidOperationException("NetworkManager already initialized as " + error);
@@ -111,7 +114,7 @@ namespace ENetServer
             serializeWorker = new SerializeWorker();
             clientWorker = new ClientWorker();
 
-            isInitialized = true;
+            state = State.Initialized;
         }
 
         /// <summary>
@@ -119,6 +122,17 @@ namespace ENetServer
         /// </summary>
         public void StartThreadedOperations()
         {
+            // Verify proper state.
+            if (state == State.Uninitialized)
+            {
+                throw new InvalidOperationException("Cannot start threads before NetworkManager is properly initialized. State: "
+                    + state.ToString());
+            }
+            else if (state == State.Running)
+            {
+                throw new InvalidOperationException("Threaded operations are already running. State: " + state.ToString());
+            }
+
             // Starts each threaded operation (one for serialization, one for ENet) here.
             if (isServer)
             {
@@ -130,6 +144,8 @@ namespace ENetServer
                 serverWorker?.StartThread();
                 clientWorker?.StartThread();
             }
+
+            state = State.Running;
         }
 
         /// <summary>
@@ -137,8 +153,13 @@ namespace ENetServer
         /// </summary>
         public void StopThreadedOperations()
         {
+            // If state is not Running, cannot stop threads.
+            if (state != State.Running)
+            {
+                throw new InvalidOperationException("Cannot stop threads which are not running. State: " + state.ToString());
+            }
+
             // Stops each threaded operation gracefully.
-            // Starts each threaded operation (one for serialization, one for ENet) here.
             if (isServer)
             {
                 serverWorker?.StopThread();
@@ -152,6 +173,8 @@ namespace ENetServer
 
             // NOTE: NetworkWorker should be stopped first because disconnecting clients will enqueue
             //  disconnect events that should be handled by the serialization thread.
+
+            state = State.Stopped;
         }
 
 

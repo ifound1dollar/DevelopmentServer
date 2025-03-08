@@ -53,9 +53,7 @@ namespace ENetServer.NetObjects.DataObjects
                     }
                 case DataType.Transform:
                     {
-                        return new TransformDataObject.Builder()
-                            .FromByteArray(bytes)
-                            .Build();   //TODO: ANALYZE EFFICIENCY WITH USING A BUILDER (two objects created here)
+                        return new TransformDataObject(bytes);
                     }
             }
 
