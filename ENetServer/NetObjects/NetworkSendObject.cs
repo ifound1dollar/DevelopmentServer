@@ -1,4 +1,5 @@
 ﻿using ENet;
+using ENetServer.NetObjects.DataObjects;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,82 +10,84 @@ using static ENetServer.NetHelpers;
 namespace ENetServer.NetObjects
 {
     /// <summary>
-    /// Data object containing SERIALIZED network data TO BE SENT over the network. Must use Builder to create objects.
+    /// Net object containing SERIALIZED network data TO BE SENT over the network. Must use Factory to create objects.
     /// </summary>
     internal class NetworkSendObject
     {
         internal SendType SendType { get; }
         internal uint PeerID { get; }
-        internal byte[] Bytes { get; }
+        internal byte[]? Bytes { get; }
 
-        private NetworkSendObject(NetworkSendObject.Builder builder)
+        private NetworkSendObject(SendType sendType, uint peerId, byte[]? bytes)
         {
-            SendType = builder.SendType;
-            PeerID = builder.PeerID;
-            Bytes = builder.Bytes;
+            SendType = sendType;
+            PeerID = peerId;
+            Bytes = bytes;
         }
 
 
 
         /// <summary>
-        /// Builder used to create new NetworkSendDataObject instances.
+        /// Factory responsible for creating NetworkSendObjects. Each method in this class corresponds
+        ///  to one SendType.
         /// </summary>
-        internal class Builder
+        internal static class Factory
         {
-            internal SendType SendType { get; private set; }
-            internal uint PeerID { get; private set; }
-            internal byte[] Bytes { get; private set; } = [];
-
-            internal Builder()
+            /// <summary>
+            /// Creates and returns a new NetworkSendObject formatted for disconnecting one client.
+            ///  Requires only the ID of the peer to disconnect.
+            /// </summary>
+            /// <param name="peerId"> ID of peer to be disconnected. </param>
+            /// <returns> The newly created 'disconnect one' NetworkSendObject. </returns>
+            internal static NetworkSendObject CreateDisconnectOne(uint peerId)
             {
-                // Default constructor
-            }
-
-
-
-            internal Builder ForDisconnectOne(uint peerId)
-            {
-                SendType = SendType.Disconnect_One;
-                PeerID = peerId;
-                return this;
-            }
-
-            internal Builder ForDisconnectAll()
-            {
-                SendType = SendType.Disconnect_All;
-                return this;
-            }
-
-            internal Builder ForMessageOne(uint peerId, byte[] bytes)
-            {
-                SendType = SendType.Message_One;
-                PeerID = peerId;
-                Bytes = bytes;
-                return this;
-            }
-
-            internal Builder ForMessageAll(byte[] bytes)
-            {
-                SendType = SendType.Message_All;
-                Bytes = bytes;
-                return this;
-            }
-
-            internal Builder ForMessageAllExcept(uint peerId, byte[] bytes)
-            {
-                SendType = SendType.Message_AllExcept;
-                PeerID = peerId;
-                Bytes = bytes;
-                return this;
+                return new NetworkSendObject(SendType.Disconnect_One, peerId, null);
             }
 
             /// <summary>
-            /// Constructs and returns a new NetworkSendDataObject with this Builder's data.
+            /// Creates and returns a new NetworkSendObject formatted for disconnecting all clients.
+            ///  Requires no parameters because it is a universal operation.
             /// </summary>
-            /// <returns> The newly constructed NetworkSendDataObject. </returns>
-            internal NetworkSendObject Build()
+            /// <returns> The newly created 'disconnect all' NetworkSendObject. </returns>
+            internal static NetworkSendObject CreateDisconnectAll()
             {
-                return new NetworkSendObject(this);
+                return new NetworkSendObject(SendType.Disconnect_All, 0, null);
+            }
+
+            /// <summary>
+            /// Creates and returns a new NetworkSendObject formatted for messaging one client. Requires
+            ///  both a peer ID and a valid non-null byte[] of serialized GameDataObject data.
+            /// </summary>
+            /// <param name="peerId"> ID of peer to send message to. </param>
+            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
+            /// <returns> The newly created 'message one' NetworkSendObject. </returns>
+            internal static NetworkSendObject CreateMessageOne(uint peerId, byte[] bytes)
+            {
+                return new NetworkSendObject(SendType.Message_One, peerId, bytes);
+            }
+
+
+            /// <summary>
+            /// Creates and returns a new NetworkSendObject formatted for messaging all clients.
+            ///  Requires only a valid non-null byte[] of serialized GameDataObject data.
+            /// </summary>
+            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
+            /// <returns> The newly created 'message all' NetworkSendObject. </returns>
+            internal static NetworkSendObject CreateMessageAll(byte[] bytes)
+            {
+                return new NetworkSendObject(SendType.Message_All, 0, bytes);
+            }
+
+            /// <summary>
+            /// Creates and returns a new NetworkSendObject formatted for messaging all clients except
+            ///  one. Requires both a peer ID and a valid non-null byte[] of serialized GameDataObject data.
+            /// </summary>
+            /// <param name="peerId"> ID of peer to except sending this message to. </param>
+            /// <param name="gameDataObject"> byte[] of serialized GameDataObject data. Must not be null. </param>
+            /// <returns> The newly created 'message all except' NetworkSendObject. </returns>
+            internal static NetworkSendObject CreateMessageAllExcept(uint peerId, byte[] bytes)
+            {
+                return new NetworkSendObject(SendType.Message_AllExcept, peerId, bytes);
             }
         }
     }

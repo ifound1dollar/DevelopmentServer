@@ -1,6 +1,7 @@
 ﻿using ENet;
 using ENetServer.NetObjects;
 using ENetServer.NetObjects.DataObjects;
+using System.Diagnostics;
 using System.Net;
 
 namespace ENetServer
@@ -32,15 +33,17 @@ namespace ENetServer
                 // Main thread input loop.
                 string? inputRaw;
                 string? inputLower;
+                string[]? inputSplit;
                 while (true)
                 {
                     Console.Write("> ");
                     inputRaw = Console.ReadLine();
                     if (inputRaw == null) break;
                     inputLower = inputRaw.ToLower();
+                    inputSplit = inputLower.Split(' ');
 
                     // Operate on input here, separate thread from server thread.
-                    if (inputLower == "exit" || inputLower == "e")
+                    if (inputLower == "exit" || inputLower == "e" || inputLower == "stop" || inputLower == "st")
                     {
                         break;
                     }
@@ -51,6 +54,15 @@ namespace ENetServer
                     else if (inputLower == "tr")
                     {
                         ServerSendTransformToAll(uint.MaxValue, -6546515611561564564, 2, 3);
+                    }
+                    else if (inputSplit.Length > 0 && inputSplit[0] == "stress")
+                    {
+                        if (inputSplit.Length < 2) continue;
+
+                        if (int.TryParse(inputSplit[1], out int duration) && duration > 0 && duration < 10)
+                        {
+                            RunGameObjectStressTest(duration);
+                        }
                     }
                     else
                     {
@@ -87,9 +99,7 @@ namespace ENetServer
         {
             Console.WriteLine("[ACTION] Disconnecting all clients.");
 
-            GameSendObject gameSendObject = new GameSendObject.Builder()
-                .ForDisconnectAll()
-                .Build();
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll();
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -105,11 +115,10 @@ namespace ENetServer
             if (gameDataObject == null)
             {
                 Console.WriteLine("[ERROR] Failed to create TextDataObject. Aborting.");
+                return;
             }
 
-            GameSendObject gameSendObject = new GameSendObject.Builder()
-                .ForMessageAll(gameDataObject)
-                .Build();
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(gameDataObject);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -131,12 +140,36 @@ namespace ENetServer
             if (gameDataObject == null)
             {
                 Console.WriteLine("[ERROR] Failed to create TransformDataObject. Aborting.");
+                return;
             }
 
-            GameSendObject gameSendObject = new GameSendObject.Builder()
-                .ForMessageAll(gameDataObject)
-                .Build();
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(gameDataObject);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+        }
+
+        /// <summary>
+        /// Runs a stress test for the passed-in duration, creating new GameDataObjects continuously
+        ///  until the duration ends.
+        /// </summary>
+        /// <param name="duration"> Duration in seconds to run the stress test. </param>
+        public static void RunGameObjectStressTest(int duration)
+        {
+            int durationMS = duration * 1000;
+            long counter = 0;
+
+            Stopwatch sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < durationMS)
+            {
+                TextDataObject.Factory.CreateFromDefault("test");
+                //TransformDataObject.Factory.CreateFromDefault(0, [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+                counter++;
+            }
+
+            sw.Stop();
+            sw.Reset();
+            
+            Console.WriteLine("[LOG] Total number of GameDataObjects created during {0}s stress test: {1:n0}", duration, counter);
+            Console.WriteLine("[LOG] Average per second: {0:n0}", counter / duration);
         }
     }
 }

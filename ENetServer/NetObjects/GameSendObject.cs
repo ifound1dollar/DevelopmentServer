@@ -8,80 +8,85 @@ using static ENetServer.NetHelpers;
 
 namespace ENetServer.NetObjects
 {
+    /// <summary>
+    /// Net object containing NON-SERIALIZED network data TO BE SENT over the network. Must use Factory to create objects.
+    /// </summary>
     public class GameSendObject
     {
         public SendType SendType { get; }
         public uint PeerID { get; }
         public GameDataObject? GameDataObject { get; }
 
-        private GameSendObject(GameSendObject.Builder builder)
+        private GameSendObject(SendType sendType, uint peerId, GameDataObject? gameDataObject)
         {
-            PeerID = builder.PeerID;
-            SendType = builder.SendType;
-            GameDataObject = builder.GameDataObject;
+            SendType = sendType;
+            PeerID = peerId;
+            GameDataObject = gameDataObject;
         }
 
 
 
         /// <summary>
-        /// Builder used to create new GameSendObject instances.
+        /// Factory responsible for creating GameSendObjects. Each method in this class corresponds
+        ///  to one SendType.
         /// </summary>
-        public class Builder
+        public static class Factory
         {
-            public SendType SendType { get; private set; }
-            public uint PeerID { get; private set; }
-            public GameDataObject? GameDataObject { get; private set; }
-
-            public Builder()
+            /// <summary>
+            /// Creates and returns a new GameSendObject formatted for disconnecting one client.
+            ///  Requires only the ID of the peer to disconnect.
+            /// </summary>
+            /// <param name="peerId"> ID of peer to be disconnected. </param>
+            /// <returns> The newly created 'disconnect one' GameSendObject. </returns>
+            public static GameSendObject CreateDisconnectOne(uint peerId)
             {
-                // Default constructor
-            }
-
-
-
-            public Builder ForDisconnectOne(uint peerId)
-            {
-                SendType = SendType.Disconnect_One;
-                PeerID = peerId;
-                return this;
-            }
-
-            public Builder ForDisconnectAll()
-            {
-                SendType = SendType.Disconnect_All;
-                return this;
-            }
-
-            public Builder ForMessageOne(uint peerId, GameDataObject? gameDataObject)
-            {
-                SendType = SendType.Message_One;
-                PeerID = peerId;
-                GameDataObject = gameDataObject;
-                return this;
-            }
-
-            public Builder ForMessageAll(GameDataObject? gameDataObject)
-            {
-                SendType = SendType.Message_All;
-                GameDataObject = gameDataObject;
-                return this;
-            }
-
-            public Builder ForMessageAllExcept(uint peerId, GameDataObject? gameDataObject)
-            {
-                SendType = SendType.Message_AllExcept;
-                PeerID = peerId;
-                GameDataObject = gameDataObject;
-                return this;
+                return new GameSendObject(SendType.Disconnect_One, peerId, null);
             }
 
             /// <summary>
-            /// Constructs and returns a new GameSendObject with this Builder's data.
+            /// Creates and returns a new GameSendObject formatted for disconnecting all clients.
+            ///  Requires no parameters because it is a universal operation.
             /// </summary>
-            /// <returns> The newly constructed GameSendObject. </returns>
-            public GameSendObject Build()
+            /// <returns> The newly created 'disconnect all' GameSendObject. </returns>
+            public static GameSendObject CreateDisconnectAll()
             {
-                return new GameSendObject(this);
+                return new GameSendObject(SendType.Disconnect_All, 0, null);
+            }
+
+            /// <summary>
+            /// Creates and returns a new GameSendObject formatted for messaging one client. Requires
+            ///  both the ID of the peer to message and a valid non-null GameDataObject.
+            /// </summary>
+            /// <param name="peerId"> ID of peer to send message to. </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns> The newly created 'message one' GameSendObject. </returns>
+            public static GameSendObject CreateMessageOne(uint peerId, GameDataObject gameDataObject)
+            {
+                return new GameSendObject(SendType.Message_One, peerId, gameDataObject);
+            }
+
+
+            /// <summary>
+            /// Creates and returns a new GameSendObject formatted for messaging all clients.
+            ///  Requires only a valid non-null GameDataObject.
+            /// </summary>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns> The newly created 'message all' GameSendObject. </returns>
+            public static GameSendObject CreateMessageAll(GameDataObject gameDataObject)
+            {
+                return new GameSendObject(SendType.Message_All, 0, gameDataObject);
+            }
+
+            /// <summary>
+            /// Creates and returns a new GameSendObject formatted for message all clients except
+            ///  one. Requires both the ID of the peer NOT to message and a valid non-null GameDataObject.
+            /// </summary>
+            /// <param name="peerId"> ID of peer to except sending this message to. </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns> The newly created 'message all except' GameSendObject. </returns>
+            public static GameSendObject CreateMessageAllExcept(uint peerId, GameDataObject gameDataObject)
+            {
+                return new GameSendObject(SendType.Message_AllExcept, peerId, gameDataObject);
             }
         }
     }

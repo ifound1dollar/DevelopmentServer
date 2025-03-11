@@ -153,7 +153,7 @@ namespace ENetServer.Management
         }
 
         /// <summary>
-        /// Handles events and runs host service. Blocks until all operations have been completed.
+        /// Handles net receive tasks - handles ENet events and runs host service, adds to network receive queue.
         /// </summary>
         internal void DoNetReceiveTasks()
         {
@@ -333,9 +333,7 @@ namespace ENetServer.Management
             Peers.Add(peer.ID, peer);
 
             // Enqueue connect event for use by other threads.
-            NetworkRecvObject dataObject = new NetworkRecvObject.Builder()
-                .FromConnect(peer.ID, peer.IP, peer.Port)
-                .Build();
+            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromConnect(peer.ID, peer.IP, peer.Port);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -346,9 +344,7 @@ namespace ENetServer.Management
             Peers.Remove(peer.ID);
 
             // Enqueue disconnect event for use by other threads.
-            NetworkRecvObject dataObject = new NetworkRecvObject.Builder()
-                .FromDisconnect(peer.ID, peer.IP, peer.Port)
-                .Build();
+            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromDisconnect(peer.ID, peer.IP, peer.Port);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -359,9 +355,7 @@ namespace ENetServer.Management
             Peers.Remove(peer.ID);
 
             // Enqueue timeout event for use by other threads.
-            NetworkRecvObject dataObject = new NetworkRecvObject.Builder()
-                .FromTimeout(peer.ID, peer.IP, peer.Port)
-                .Build();
+            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromTimeout(peer.ID, peer.IP, peer.Port);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -374,9 +368,7 @@ namespace ENetServer.Management
             Peer peer = receiveEvent.Peer;
 
             // Enqueue NetworkRecvObject with data from this receive event.
-            NetworkRecvObject dataObject = new NetworkRecvObject.Builder()
-                .FromMessage(peer.ID, peer.IP, peer.Port, bytes)
-                .Build();
+            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromMessage(peer.ID, peer.IP, peer.Port, bytes);
             netRecvQueue.Enqueue(dataObject);
 
             // Dispose packet after handling.

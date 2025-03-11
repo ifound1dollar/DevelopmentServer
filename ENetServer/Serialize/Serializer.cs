@@ -41,7 +41,7 @@ namespace ENetServer.Serialize
 
 
         /// <summary>
-        /// Handles game out tasks - read from game out queue, operate on data (serialize), add to network send queue.
+        /// Handles game send tasks - read from game out queue, operate on data (serialize), add to network send queue.
         /// </summary>
         internal void DoGameToNetTasks()
         {
@@ -84,7 +84,7 @@ namespace ENetServer.Serialize
         }
 
         /// <summary>
-        /// Handles net receive tasks - read from network receive queue, operate on data (deserialize), add to game in queue.
+        /// Handles game receive tasks - read from network receive queue, operate on data (deserialize), add to game in queue.
         /// </summary>
         internal void DoNetToGameTasks()
         {
@@ -127,65 +127,55 @@ namespace ENetServer.Serialize
 
         private void SendDisconnectOne(GameSendObject gameObject)
         {
-            NetworkSendObject dataObject = new NetworkSendObject.Builder()
-                .ForDisconnectOne(gameObject.PeerID)
-                .Build();
+            NetworkSendObject dataObject = NetworkSendObject.Factory.CreateDisconnectOne(gameObject.PeerID);
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendDisconnectAll()
         {
-            NetworkSendObject dataObject = new NetworkSendObject.Builder()
-                .ForDisconnectAll()
-                .Build();
+            NetworkSendObject dataObject = NetworkSendObject.Factory.CreateDisconnectAll();
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendMessageOne(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[]? bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
             if (bytes == null)
             {
                 Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
                 return;
             }
 
-            NetworkSendObject dataObject = new NetworkSendObject.Builder()
-                .ForMessageOne(gameObject.PeerID, bytes)
-                .Build();
+            NetworkSendObject dataObject = NetworkSendObject.Factory.CreateMessageOne(gameObject.PeerID, bytes);
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendMessageAll(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[].
-            byte[]? bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
             if (bytes == null)
             {
                 Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
                 return;
             }
 
-            NetworkSendObject dataObject = new NetworkSendObject.Builder()
-                .ForMessageAll(bytes)
-                .Build();
+            NetworkSendObject dataObject = NetworkSendObject.Factory.CreateMessageAll(bytes);
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendMessageAllExcept(GameSendObject gameObject)
         {
             // Serialize GameOutObject data and return as byte[]. If empty array, log failure and return.
-            byte[]? bytes = SerializeGameDataObject(gameObject.GameDataObject);
+            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
             if (bytes == null)
             {
                 Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
                 return;
             }
 
-            NetworkSendObject dataObject = new NetworkSendObject.Builder()
-                .ForMessageAllExcept(gameObject.PeerID, bytes)
-                .Build();
+            NetworkSendObject dataObject = NetworkSendObject.Factory.CreateMessageAllExcept(gameObject.PeerID, bytes);
             netSendQueue.Enqueue(dataObject);
         }
 
@@ -200,9 +190,7 @@ namespace ENetServer.Serialize
             if (!connectionsDict.TryAdd(connection.ID, connection))
             {
                 // Create and enqueue disconnect request.
-                NetworkSendObject dataObject = new NetworkSendObject.Builder()
-                    .ForDisconnectOne(recvObject.PeerID)
-                    .Build();
+                NetworkSendObject dataObject = NetworkSendObject.Factory.CreateDisconnectOne(recvObject.PeerID);
                 netSendQueue.Enqueue(dataObject);
 
                 // Log connection failure.
@@ -238,7 +226,7 @@ namespace ENetServer.Serialize
         private void ReceiveMessage(NetworkRecvObject recvObject)
         {
             // Attempt to deserialize received byte[] into GameDataObject. Log error and return if failure.
-            GameDataObject? gameDataObject = GameDataObject.Deserialize(recvObject.Bytes);
+            GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(recvObject.Bytes);
             if (gameDataObject == null)
             {
                 Console.WriteLine("[ERROR] Failed to deserialize data received from peer ID {0}. Discarding.", recvObject.PeerID);
@@ -246,14 +234,13 @@ namespace ENetServer.Serialize
             }
 
             // Create GameRecvObject after deserializing, then enqueue for game/main thread reading.
-            GameRecvObject gameRecvObject = new GameRecvObject.Builder()
-                .FromMessage(recvObject.PeerID, gameDataObject)
-                .Build();
+            GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromMessage(recvObject.PeerID, gameDataObject);
             gameRecvQueue.Enqueue(gameRecvObject);
 
 
 
             /// ----- BELOW IS ENTIRELY TEMPORARY, SIMULATING GAME THREAD READING FROM GAME IN QUEUE -----
+            /// TODO: ELIMINATE THIS WHEN IMPLEMENTED IN ENGINE
             if (!gameRecvQueue.TryDequeue(out GameRecvObject? tempRecvObject)) return;
 
             // Output incoming data.
@@ -268,37 +255,5 @@ namespace ENetServer.Serialize
 
         //TODO: MODIFY THIS CLASS TO ENSURE SAFE CLIENT OPERATION (CONNECTIONSDICT REFERENCE AND ADDING/REMOVING)
 
-        #region Serialization Methods
-
-        /// <summary>
-        /// Attempts to serialize the passed-in GameDataObject into a byte[]. User should
-        ///  verify success immediately after calling this method.
-        /// </summary>
-        /// <param name="dataObject"> The GameDataObject attempting to be serialized. May be null. </param>
-        /// <returns> The serialized GameDataObject as a byte[], or null if unsuccessful (null argument). </returns>
-        private static byte[]? SerializeGameDataObject(GameDataObject? dataObject)
-        {
-            // Return null if argument GameDataObject is null.
-            if (dataObject == null)
-            {
-                return null;
-            }
-
-            // If argument GameDataObject is not null, serialize into byte[].
-            byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
-
-            // TEMP
-            foreach (byte b in bytes)
-            {
-                Console.Write(b + " ");
-            }
-            Console.WriteLine();
-            // TEMP
-
-            // Return the GameDataObject serialized into a raw byte[].
-            return bytes;
-        }
-
-        #endregion
     }
 }

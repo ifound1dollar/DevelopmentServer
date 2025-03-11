@@ -8,73 +8,73 @@ using static ENetServer.NetHelpers;
 
 namespace ENetServer.NetObjects
 {
+    /// <summary>
+    /// Net object containing DESERIALIZED network data JUST RECEIVED over the network. Must use Factory to create objects.
+    /// </summary>
     public class GameRecvObject
     {
         public uint PeerID { get; }
         public RecvType RecvType { get; }
         public GameDataObject? GameDataObject { get; }
 
-        private GameRecvObject(GameRecvObject.Builder builder)
+        private GameRecvObject(RecvType recvType, uint peerId, GameDataObject? gameDataObject)
         {
-            PeerID = builder.PeerID;
-            RecvType = builder.RecvType;
-            GameDataObject = builder.GameDataObject;
+            PeerID = peerId;
+            RecvType = recvType;
+            GameDataObject = gameDataObject;
         }
 
 
 
         /// <summary>
-        /// Builder used to create new GameRecvObject instances.
+        /// Factory responsible for creating GameRecvObjects. Each method in this class corresponds to
+        ///  one RecvType.
         /// </summary>
-        public class Builder
+        internal static class Factory
         {
-            public uint PeerID { get; private set; }
-            public RecvType RecvType { get; private set; }
-            public GameDataObject? GameDataObject { get; private set; }
-
-            public Builder()
+            /// <summary>
+            /// Creates and returns a new GameRecvObject from a 'connect' ENet event. Requires only
+            ///  peer information, does not require a deserialized GameDataObject.
+            /// </summary>
+            /// <param name="peerId"> ID of peer that just connected. </param>
+            /// <returns> The newly created 'connect' GameRecvObject. </returns>
+            internal static GameRecvObject CreateFromConnect(uint peerId)
             {
-                // Default constructor
-            }
-
-
-
-            public Builder FromConnect(uint peerId)
-            {
-                RecvType = RecvType.Connect;
-                PeerID = peerId;
-                return this;
-            }
-
-            public Builder FromDisconnect(uint peerId)
-            {
-                RecvType = RecvType.Disconnect;
-                PeerID = peerId;
-                return this;
-            }
-
-            public Builder FromTimeout(uint peerId)
-            {
-                RecvType = RecvType.Timeout;
-                PeerID = peerId;
-                return this;
-            }
-
-            public Builder FromMessage(uint peerId, GameDataObject? gameDataObject)
-            {
-                RecvType = RecvType.Message;
-                PeerID = peerId;
-                GameDataObject = gameDataObject;
-                return this;
+                return new GameRecvObject(RecvType.Connect, peerId, null);
             }
 
             /// <summary>
-            /// Constructs and returns a new GameRecvObject with this Builder's data.
+            /// Creates and returns a new GameRecvObject from a 'disconnect' ENet event. Requires only
+            ///  peer information, does not require a deserialized GameDataObject.
             /// </summary>
-            /// <returns> The newly constructed GameRecvObject. </returns>
-            public GameRecvObject Build()
+            /// <param name="peerId"> ID of peer that just disconnected. </param>
+            /// <returns> The newly created 'disconnect' GameRecvObject. </returns>
+            internal static GameRecvObject CreateFromDisconnect(uint peerId)
             {
-                return new GameRecvObject(this);
+                return new GameRecvObject(RecvType.Disconnect, peerId, null);
+            }
+
+            /// <summary>
+            /// Creates and returns a new GameRecvObject from a 'timeout' ENet event. Requires only
+            ///  peer information, does not require a deserialized GameDataObject.
+            /// </summary>
+            /// <param name="peerId"> ID of peer that just timed out. </param>
+            /// <returns> The newly created 'timeout' GameRecvObject. </returns>
+            internal static GameRecvObject CreateFromTimeout(uint peerId)
+            {
+                return new GameRecvObject(RecvType.Timeout, peerId, null);
+            }
+
+            /// <summary>
+            /// Creates and returns a new GameRecvObject from a 'message' ENet event. Requires
+            ///  peer information and a valid non-null deserialized GameDataObject.
+            /// </summary>
+            /// <param name="peerId"> ID of peer that the message was received from. </param>
+            /// <param name="gameDataObject"> GameDataObject deserialized from the received byte[] payload. Must not be null. </param>
+            /// <returns> The newly created 'message' GameRecvObject. </returns>
+            internal static GameRecvObject CreateFromMessage(uint peerId, GameDataObject gameDataObject)
+            {
+                return new GameRecvObject(RecvType.Message, peerId, gameDataObject);
             }
         }
     }

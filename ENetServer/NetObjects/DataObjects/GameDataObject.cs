@@ -35,16 +35,44 @@ namespace ENetServer.NetObjects.DataObjects
 
 
         /// <summary>
+        /// Attempts to serialize the passed-in GameDataObject into a byte[]. User should
+        ///  verify success immediately after calling this method.
+        /// </summary>
+        /// <param name="dataObject"> The GameDataObject attempting to be serialized. May be null. </param>
+        /// <returns> The serialized GameDataObject as a byte[], or null if unsuccessful (null argument). </returns>
+        public static byte[]? SerializeGameDataObject(GameDataObject? dataObject)
+        {
+            // Return null if argument GameDataObject is null.
+            if (dataObject == null) return null;
+
+            // If argument GameDataObject is not null, serialize into byte[].
+            byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
+
+            // TEMP
+            foreach (byte b in bytes)
+            {
+                Console.Write(b + " "); // TODO: REMOVE THIS TEMP TEST PRINT
+            }
+            Console.WriteLine();
+            // TEMP
+
+            // Return the GameDataObject serialized into a raw byte[].
+            return bytes;
+        }
+
+        /// <summary>
         /// Attemps to deserialize a byte[] into a valid GameDataObject instance. User should
         ///  verify success immediately after calling this method.
         /// </summary>
         /// <param name="bytes"> The byte[] attempting to be deserialized. </param>
-        /// <returns> The deserialized GameDataObject, or null if unsuccessful (malformed byte[]). </returns>
-        public static GameDataObject? Deserialize(byte[] bytes)
+        /// <returns> The deserialized GameDataObject, or null if unsuccessful (malformed or null byte[]). </returns>
+        public static GameDataObject? DeserializeGameDataObject(byte[]? bytes)
         {
-            // Directly cast first byte in byte[] to DataType (if data is correctly formatted, this is fine).
+            // Ensure argument byte[] is non-null, then directly cast first byte in byte[] to DataType.
+            if (bytes == null) return null;
             DataType dataType = (DataType)bytes[0];
 
+            // Switch on the DataType byte to determine which class' deserialization method to call.
             GameDataObject? dataObject = null;
             switch (dataType)
             {

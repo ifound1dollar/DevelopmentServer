@@ -9,89 +9,84 @@ using static ENetServer.NetHelpers;
 namespace ENetServer.NetObjects
 {
     /// <summary>
-    /// Data object containing SERIALIZED network data JUST RECEIVED over the network. Must use Builder to create objects.
+    /// Net object containing SERIALIZED network data JUST RECEIVED over the network. Must use Factory to create objects.
     /// </summary>
     internal class NetworkRecvObject
     {
+        internal RecvType RecvType { get; }
         internal uint PeerID { get; }
         internal string PeerIP { get; }
         internal ushort PeerPort { get; }
-        internal byte[] Bytes { get; }
-        internal RecvType RecvType { get; }
+        internal byte[]? Bytes { get; }
 
-        private NetworkRecvObject(NetworkRecvObject.Builder builder)
+        private NetworkRecvObject(RecvType recvType, uint peerId, string peerIp, ushort peerPort, byte[]? bytes)
         {
-            PeerID = builder.PeerID;
-            PeerIP = builder.PeerIP;
-            PeerPort = builder.PeerPort;
-            Bytes = builder.Bytes;
-            RecvType = builder.RecvType;
+            RecvType = recvType;
+            PeerID = peerId;
+            PeerIP = peerIp;
+            PeerPort = peerPort;
+            Bytes = bytes;
         }
 
 
 
         /// <summary>
-        /// Builder used to create new NetworkRecvDataObject instances.
+        /// Factory responsible for creating NetworkRecvObjects. Each method in this class corresponds
+        ///  to one RecvType.
         /// </summary>
-        internal class Builder
+        internal static class Factory
         {
-            internal uint PeerID { get; private set; }
-            internal string PeerIP { get; private set; } = string.Empty;
-            internal ushort PeerPort { get; private set; }
-            internal byte[] Bytes { get; private set; } = [];
-            internal RecvType RecvType { get; private set; }
-
-            internal Builder()
+            /// <summary>
+            /// Creates and returns a new NetworkRecvObject from a 'connect' ENet event. Requires only
+            ///  peer information (no byte[] payload).
+            /// </summary>
+            /// <param name="peerId"> ID of peer that just connected. </param>
+            /// <param name="peerIp"> IP address of peer that just connected. </param>
+            /// <param name="peerPort"> Port of peer that just connected. </param>
+            /// <returns> The newly created 'connect' NetworkRecvObject. </returns>
+            internal static NetworkRecvObject CreateFromConnect(uint peerId, string peerIp, ushort peerPort)
             {
-                // Default constructor
-            }
-
-
-
-            public Builder FromConnect(uint peerId, string peerIp, ushort peerPort)
-            {
-                RecvType = RecvType.Connect;
-                PeerID = peerId;
-                PeerIP = peerIp;
-                PeerPort = peerPort;
-                return this;
-            }
-
-            public Builder FromDisconnect(uint peerId, string peerIp, ushort peerPort)
-            {
-                RecvType = RecvType.Disconnect;
-                PeerID = peerId;
-                PeerIP = peerIp;
-                PeerPort = peerPort;
-                return this;
-            }
-
-            public Builder FromTimeout(uint peerId, string peerIp, ushort peerPort)
-            {
-                RecvType = RecvType.Timeout;
-                PeerID = peerId;
-                PeerIP = peerIp;
-                PeerPort = peerPort;
-                return this;
-            }
-
-            public Builder FromMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes)
-            {
-                RecvType = RecvType.Message;
-                PeerID = peerId;
-                PeerIP = peerIp;
-                PeerPort = peerPort;
-                Bytes = bytes;
-                return this;
+                return new NetworkRecvObject(RecvType.Connect, peerId, peerIp, peerPort, null);
             }
 
             /// <summary>
-            /// Constructs and returns a new NetworkRecvDataObject with this Builder's data.
+            /// Creates and returns a new NetworkRecvObject from a 'disconnect' ENet event. Requires
+            ///  only peer information (no byte[] payload).
             /// </summary>
-            /// <returns> The newly constructed NetworkRecvDataObject. </returns>
-            internal NetworkRecvObject Build()
+            /// <param name="peerId"> ID of peer that just disconnected. </param>
+            /// <param name="peerIp"> IP address of peer that just disconnected. </param>
+            /// <param name="peerPort"> Port of peer that just disconnected. </param>
+            /// <returns> The newly created 'disconnect' NetworkRecvObject. </returns>
+            internal static NetworkRecvObject CreateFromDisconnect(uint peerId, string peerIp, ushort peerPort)
             {
-                return new NetworkRecvObject(this);
+                return new NetworkRecvObject(RecvType.Disconnect, peerId, peerIp, peerPort, null);
+            }
+
+            /// <summary>
+            /// Creates and returns a new NetworkRecvObject from a 'timeout' ENet event. Requires
+            ///  only peer information (no byte[] payload).
+            /// </summary>
+            /// <param name="peerId"> ID of peer that just timed out. </param>
+            /// <param name="peerIp"> IP address of peer that just timed out. </param>
+            /// <param name="peerPort"> Port of peer that just timed out. </param>
+            /// <returns> The newly created 'timeout' NetworkRecvObject. </returns>
+            internal static NetworkRecvObject CreateFromTimeout(uint peerId, string peerIp, ushort peerPort)
+            {
+                return new NetworkRecvObject(RecvType.Timeout, peerId, peerIp, peerPort, null);
+            }
+
+            /// <summary>
+            /// Creates and returns a new NetworkRecvObject from a 'message' ENet event. Requires
+            ///  peer information and byte[] payload of incoming message packet.
+            /// </summary>
+            /// <param name="peerId"> ID of peer that the message was received from. </param>
+            /// <param name="peerIp"> IP address of peer that the message was received from. </param>
+            /// <param name="peerPort"> Port of peer that the message was received from. </param>
+            /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
+            /// <returns> The newly created 'message' NetworkRecvObject. </returns>
+            internal static NetworkRecvObject CreateFromMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes)
+            {
+                return new NetworkRecvObject(RecvType.Message, peerId, peerIp, peerPort, bytes);
             }
         }
     }
