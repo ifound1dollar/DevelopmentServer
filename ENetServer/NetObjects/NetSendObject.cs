@@ -12,13 +12,13 @@ namespace ENetServer.NetObjects
     /// <summary>
     /// Net object containing SERIALIZED network data TO BE SENT over the network. Must use Factory to create objects.
     /// </summary>
-    internal class NetworkSendObject
+    internal class NetSendObject
     {
         internal SendType SendType { get; }
         internal uint PeerID { get; }
         internal byte[]? Bytes { get; }
 
-        private NetworkSendObject(SendType sendType, uint peerId, byte[]? bytes)
+        private NetSendObject(SendType sendType, uint peerId, byte[]? bytes)
         {
             SendType = sendType;
             PeerID = peerId;
@@ -39,9 +39,9 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="peerId"> ID of peer to be disconnected. </param>
             /// <returns> The newly created 'disconnect one' NetworkSendObject. </returns>
-            internal static NetworkSendObject CreateDisconnectOne(uint peerId)
+            internal static NetSendObject CreateDisconnectOne(uint peerId)
             {
-                return new NetworkSendObject(SendType.Disconnect_One, peerId, null);
+                return new NetSendObject(SendType.Disconnect_One, peerId, null);
             }
 
             /// <summary>
@@ -49,9 +49,9 @@ namespace ENetServer.NetObjects
             ///  Requires no parameters because it is a universal operation.
             /// </summary>
             /// <returns> The newly created 'disconnect all' NetworkSendObject. </returns>
-            internal static NetworkSendObject CreateDisconnectAll()
+            internal static NetSendObject CreateDisconnectAll()
             {
-                return new NetworkSendObject(SendType.Disconnect_All, 0, null);
+                return new NetSendObject(SendType.Disconnect_All, 0, null);
             }
 
             /// <summary>
@@ -61,9 +61,9 @@ namespace ENetServer.NetObjects
             /// <param name="peerId"> ID of peer to send message to. </param>
             /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
             /// <returns> The newly created 'message one' NetworkSendObject. </returns>
-            internal static NetworkSendObject CreateMessageOne(uint peerId, byte[] bytes)
+            internal static NetSendObject CreateMessageOne(uint peerId, byte[] bytes)
             {
-                return new NetworkSendObject(SendType.Message_One, peerId, bytes);
+                return new NetSendObject(SendType.Message_One, peerId, bytes);
             }
 
 
@@ -73,9 +73,9 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
             /// <returns> The newly created 'message all' NetworkSendObject. </returns>
-            internal static NetworkSendObject CreateMessageAll(byte[] bytes)
+            internal static NetSendObject CreateMessageAll(byte[] bytes)
             {
-                return new NetworkSendObject(SendType.Message_All, 0, bytes);
+                return new NetSendObject(SendType.Message_All, 0, bytes);
             }
 
             /// <summary>
@@ -85,9 +85,9 @@ namespace ENetServer.NetObjects
             /// <param name="peerId"> ID of peer to except sending this message to. </param>
             /// <param name="gameDataObject"> byte[] of serialized GameDataObject data. Must not be null. </param>
             /// <returns> The newly created 'message all except' NetworkSendObject. </returns>
-            internal static NetworkSendObject CreateMessageAllExcept(uint peerId, byte[] bytes)
+            internal static NetSendObject CreateMessageAllExcept(uint peerId, byte[] bytes)
             {
-                return new NetworkSendObject(SendType.Message_AllExcept, peerId, bytes);
+                return new NetSendObject(SendType.Message_AllExcept, peerId, bytes);
             }
         }
     }

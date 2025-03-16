@@ -18,16 +18,16 @@ namespace ENetServer.Management
         private int channelLimit;
 
         // QUEUE REFERENCES
-        private readonly ConcurrentQueue<NetworkSendObject> netSendQueue;
-        private readonly ConcurrentQueue<NetworkRecvObject> netRecvQueue;
+        private readonly ConcurrentQueue<NetSendObject> netSendQueue;
+        private readonly ConcurrentQueue<NetRecvObject> netRecvQueue;
 
         /// <summary>
         /// Constructs a Server object with references to network concurrent queues.
         /// </summary>
         /// <param name="netSendQueue"> Reference to network send queue. </param>
         /// <param name="netRecvQueue"> Reference to network receive queue. </param>
-        internal Server(ConcurrentQueue<NetworkSendObject> netSendQueue,
-            ConcurrentQueue<NetworkRecvObject> netRecvQueue)
+        internal Server(ConcurrentQueue<NetSendObject> netSendQueue,
+            ConcurrentQueue<NetRecvObject> netRecvQueue)
         {
             this.netSendQueue = netSendQueue;
             this.netRecvQueue = netRecvQueue;
@@ -118,7 +118,7 @@ namespace ENetServer.Management
             while (!netSendQueue.IsEmpty)
             {
                 // Try to dequeue item from serializeQueue, operating on the item if successful.
-                if (!netSendQueue.TryDequeue(out NetworkSendObject? netSendObject)) break;
+                if (!netSendQueue.TryDequeue(out NetSendObject? netSendObject)) break;
 
                 // Operate based on send type.
                 switch (netSendObject.SendType)
@@ -225,7 +225,7 @@ namespace ENetServer.Management
         /// </summary>
         /// <param name="peerId"> ID of Peer to send packet to. </param>
         /// <param name="packet"> Packet to send to Peer. </param>
-        internal void QueueSendOne(NetworkSendObject dataObject)
+        internal void QueueSendOne(NetSendObject dataObject)
         {
             // Return if a peer with this ID does not exist.
             if (!Peers.TryGetValue(dataObject.PeerID, out Peer peer)) return;
@@ -245,7 +245,7 @@ namespace ENetServer.Management
         /// Sends a packet to all connected peers.
         /// </summary>
         /// <param name="packet"> Packet to send to Peer. </param>
-        internal void QueueSendAll(NetworkSendObject dataObject)
+        internal void QueueSendAll(NetSendObject dataObject)
         {
             // Iterate over all clients, sending packet to all except matching.
             foreach (var peer in Peers)
@@ -267,7 +267,7 @@ namespace ENetServer.Management
         /// </summary>
         /// <param name="peerId"> ID of Peer being excluded from packet send. </param>
         /// <param name="packet"> Packet to send to Peer. </param>
-        internal void QueueSendAllExcept(NetworkSendObject dataObject)
+        internal void QueueSendAllExcept(NetSendObject dataObject)
         {
             // Iterate over all clients, sending packet to all except matching.
             foreach (var peer in Peers)
@@ -294,7 +294,7 @@ namespace ENetServer.Management
         /// Queues disconnect requests to be sent to all connected clients next tick.
         /// </summary>
         /// <param name="peerId"> ID of Peer to disconnect. </param>
-        internal void QueueDisconnectOne(NetworkSendObject dataObject)
+        internal void QueueDisconnectOne(NetSendObject dataObject)
         {
             // Return if a Peer with this ID is not found.
             if (!Peers.TryGetValue(dataObject.PeerID, out Peer peer)) return;
@@ -332,8 +332,9 @@ namespace ENetServer.Management
             Peer peer = connectEvent.Peer;
             Peers.Add(peer.ID, peer);
 
-            // Enqueue connect event for use by other threads.
-            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromConnect(peer.ID, peer.IP, peer.Port);
+            // Create connection object for this peer, then enqueue connect object for use by other threads.
+            Connection connection = new(peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(connection);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -343,8 +344,9 @@ namespace ENetServer.Management
             Peer peer = disconnectEvent.Peer;
             Peers.Remove(peer.ID);
 
-            // Enqueue disconnect event for use by other threads.
-            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromDisconnect(peer.ID, peer.IP, peer.Port);
+            // Create connection object for this peer, then enqueue disconnect object for use by other threads.
+            Connection connection = new(peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(connection);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -354,8 +356,9 @@ namespace ENetServer.Management
             Peer peer = timeoutEvent.Peer;
             Peers.Remove(peer.ID);
 
-            // Enqueue timeout event for use by other threads.
-            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromTimeout(peer.ID, peer.IP, peer.Port);
+            // Create connection object for this peer, then enqueue timeout object for use by other threads.
+            Connection connection = new(peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(connection);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -365,10 +368,9 @@ namespace ENetServer.Management
             byte[] bytes = new byte[receiveEvent.Packet.Length];
             receiveEvent.Packet.CopyTo(bytes);
 
-            Peer peer = receiveEvent.Peer;
-
-            // Enqueue NetworkRecvObject with data from this receive event.
-            NetworkRecvObject dataObject = NetworkRecvObject.Factory.CreateFromMessage(peer.ID, peer.IP, peer.Port, bytes);
+            // Create connection object for this peer, then enqueue message received NetworkRecvObject.
+            Connection connection = new(receiveEvent.Peer.ID, receiveEvent.Peer.IP, receiveEvent.Peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(connection, bytes);
             netRecvQueue.Enqueue(dataObject);
 
             // Dispose packet after handling.

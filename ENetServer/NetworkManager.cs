@@ -61,20 +61,17 @@ namespace ENetServer
         private ConcurrentQueue<GameRecvObject> GameRecvQueue { get; } = new();
 
         // Thread-safe queues for communicating network data between network and serialization/intermediate threads.
-        private ConcurrentQueue<NetworkSendObject> NetSendQueue { get; } = new();
-        private ConcurrentQueue<NetworkRecvObject> NetRecvQueue { get; } = new();
+        private ConcurrentQueue<NetSendObject> NetSendQueue { get; } = new();
+        private ConcurrentQueue<NetRecvObject> NetRecvQueue { get; } = new();
 
-        /// <summary>
-        /// Thread-safe Dictionary of all connected clients in form ID:Connection.
-        /// </summary>
-        private ConcurrentDictionary<uint, Connection> Connections { get; set; } = new();
+        // Publicly accessible because users may need to know.
+        public bool IsServer { get; private set; }
 
         // These are nullable so they can be manually initialized in Setup().
         private SerializeWorker? serializeWorker;
         private ServerWorker? serverWorker;
         private ClientWorker? clientWorker;
 
-        private bool isServer;
         private State state;
 
 
@@ -87,11 +84,11 @@ namespace ENetServer
             // Throw exception if NetworkManager has already been initialized.
             if (state != State.Uninitialized)
             {
-                string error = isServer ? "Server." : "Client.";
+                string error = IsServer ? "Server." : "Client.";
                 throw new InvalidOperationException("NetworkManager already initialized as " + error);
             }
 
-            isServer = true;
+            IsServer = true;
             serializeWorker = new SerializeWorker();
             serverWorker = new ServerWorker();
 
@@ -106,11 +103,11 @@ namespace ENetServer
             // Throw exception if NetworkManager has already been initialized.
             if (state != State.Uninitialized)
             {
-                string error = isServer ? "Server." : "Client.";
+                string error = IsServer ? "Server." : "Client.";
                 throw new InvalidOperationException("NetworkManager already initialized as " + error);
             }
 
-            isServer = false;
+            IsServer = false;
             serializeWorker = new SerializeWorker();
             clientWorker = new ClientWorker();
 
@@ -134,7 +131,7 @@ namespace ENetServer
             }
 
             // Starts each threaded operation (one for serialization, one for ENet) here.
-            if (isServer)
+            if (IsServer)
             {
                 serializeWorker?.StartThread();
                 serverWorker?.StartThread();
@@ -160,7 +157,7 @@ namespace ENetServer
             }
 
             // Stops each threaded operation gracefully.
-            if (isServer)
+            if (IsServer)
             {
                 serverWorker?.StopThread();
                 serializeWorker?.StopThread();
@@ -191,18 +188,6 @@ namespace ENetServer
             return GameRecvQueue.TryDequeue(out GameRecvObject? result) ? result : null;
         }
 
-        public Connection? GetConnectedClient(uint clientId)
-        {
-            // If this NetworkManager is for the client, return null.
-            if (!isServer)
-            {
-                return null;
-            }
-
-            Connections.TryGetValue(clientId, out Connection? client);
-            return client;
-        }
-
 
 
 
@@ -225,7 +210,7 @@ namespace ENetServer
 
                 // Startup serializer (but do not begin running).
                 serializer = new Serializer(Instance.GameSendQueue, Instance.NetSendQueue,
-                    Instance.GameRecvQueue, Instance.NetRecvQueue, Instance.Connections);
+                    Instance.GameRecvQueue, Instance.NetRecvQueue);
             }
 
 
@@ -265,6 +250,11 @@ namespace ENetServer
 
                     // Reads from network receive queue, deserializes, adds to game in queue.
                     serializer.DoNetToGameTasks();
+
+                    //TODO: REMOVE THIS METHOD CALL (AND THE METHOD) ONCE PROJECT IS READY
+                    //TEMP
+                    serializer.SimulateMainThreadDequeue();
+                    //TEMP
                 }
             }
         }
