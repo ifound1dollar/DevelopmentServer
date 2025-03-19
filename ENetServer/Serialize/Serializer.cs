@@ -3,7 +3,7 @@ using ENetServer.NetObjects;
 using ENetServer.Management;
 using System;
 using System.Collections.Concurrent;
-using static ENetServer.NetHelpers;
+using static ENetServer.NetStatics;
 using ENetServer.NetObjects.DataObjects;
 
 namespace ENetServer.Serialize

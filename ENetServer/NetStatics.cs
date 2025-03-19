@@ -3,14 +3,13 @@ using System.Collections;
 using System;
 using System.Diagnostics;
 using System.Text;
-using static ENetServer.NetworkManager;
 
 namespace ENetServer
 {
     /// <summary>
     /// Static class containing enums and methods used for networking operations.
     /// </summary>
-    public static class NetHelpers
+    public static class NetStatics
     {
         public enum SendType { None, Disconnect_One, Disconnect_All, Message_One, Message_All, Message_AllExcept }
         public enum RecvType { None, Connect, Disconnect, Timeout, Message }

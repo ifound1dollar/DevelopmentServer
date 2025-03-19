@@ -9,6 +9,11 @@ namespace ENetServer.Management
 {
     public class Connection
     {
+        public uint ID { get; }
+        public string IP { get; }
+        public ushort Port { get; }
+        public DateTime ConnectTime { get; }
+
         public Connection(uint id, string ip, ushort port)
         {
             ID = id;
@@ -17,10 +22,5 @@ namespace ENetServer.Management
 
             ConnectTime = DateTime.Now;
         }
-
-        public uint ID { get; private set; }
-        public string IP { get; private set; }
-        public ushort Port { get; private set; }
-        public DateTime ConnectTime { get; private set; }
     }
 }

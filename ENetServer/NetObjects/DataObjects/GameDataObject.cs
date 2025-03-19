@@ -14,8 +14,8 @@ namespace ENetServer.NetObjects.DataObjects
     }
     // NOTE: Adding a new DataType requires a few operations:
     //  1. Here! Make a new DataType.
-    //  2. Below within Deserialize(), creating a new GameDataObject of the proper class via switch
-    //      on DataType enum.
+    //  2. Below within DeserializeGameDataObject(), creating a new GameDataObject of the proper class
+    //      via switch on DataType enum.
     //  3. Create a new subclass of GameDataObject which corresponds to the new DataType. This must
     //      implement abstract methods and a static Factory with methods to create instances via
     //      default data and deserialization.
@@ -24,7 +24,8 @@ namespace ENetServer.NetObjects.DataObjects
 
     public abstract class GameDataObject(DataType dataType)
     {
-        // This readonly Property uses primary constructor - subclasses call base(DataType.whatever) to set this on construction.
+        // This readonly Property uses primary constructor - subclasses call base(DataType.whatever)
+        //  to set this on construction.
         public DataType DataType { get; } = dataType;
 
 
@@ -48,13 +49,11 @@ namespace ENetServer.NetObjects.DataObjects
             // If argument GameDataObject is not null, serialize into byte[].
             byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
 
-            // TEMP
             foreach (byte b in bytes)
             {
                 Console.Write(b + " "); // TODO: REMOVE THIS TEMP TEST PRINT
             }
             Console.WriteLine();
-            // TEMP
 
             // Return the GameDataObject serialized into a raw byte[].
             return bytes;

@@ -51,11 +51,11 @@ namespace ENetServer.NetObjects.DataObjects
         {
             // Convert all data into raw byte arrays to be concatenated below.
             byte[] headerBytes = [(byte)DataType];
-            byte[] actorIdBytes = NetHelpers.GetBytes(ActorID);
-            byte[] doubleBytes = NetHelpers.GetBytes(Doubles);
+            byte[] actorIdBytes = NetStatics.GetBytes(ActorID);
+            byte[] doubleBytes = NetStatics.GetBytes(Doubles);
 
             // Concat all arrays together in this specific order, then return.
-            byte[] bytes = NetHelpers.ConcatByteArrays(headerBytes, actorIdBytes, doubleBytes);
+            byte[] bytes = NetStatics.ConcatByteArrays(headerBytes, actorIdBytes, doubleBytes);
             return bytes;
         }
 
@@ -105,8 +105,8 @@ namespace ENetServer.NetObjects.DataObjects
                     return null;
                 }
 
-                uint actorId = NetHelpers.GetUInt(bytes, 1);
-                double[] doubles = NetHelpers.GetDoubles(bytes, 5, bytes.Length - 5);
+                uint actorId = NetStatics.GetUInt(bytes, 1);
+                double[] doubles = NetStatics.GetDoubles(bytes, 5, bytes.Length - 5);
                 return new TransformDataObject(actorId, doubles);
             }
         }

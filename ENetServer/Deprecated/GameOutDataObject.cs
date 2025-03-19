@@ -5,7 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using static ENetServer.NetHelpers;
+using static ENetServer.NetStatics;
 
 namespace ENetServer.Deprecated
 {

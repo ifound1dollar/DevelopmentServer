@@ -21,10 +21,10 @@ namespace ENetServer.NetObjects.DataObjects
         {
             // Convert all data into raw byte arrays to be concatenated below.
             byte[] headerBytes = [(byte)DataType];
-            byte[] stringBytes = NetHelpers.GetBytes(String);
+            byte[] stringBytes = NetStatics.GetBytes(String);
 
             // Concat all arrays together in this specific order, then return.
-            byte[] bytes = NetHelpers.ConcatByteArrays(headerBytes, stringBytes);
+            byte[] bytes = NetStatics.ConcatByteArrays(headerBytes, stringBytes);
             return bytes;
         }
 
@@ -55,7 +55,7 @@ namespace ENetServer.NetObjects.DataObjects
                     return null;
                 }
 
-                string temp = NetHelpers.FormatStringForSend(str);
+                string temp = NetStatics.FormatStringForSend(str);
                 return new TextDataObject(temp);
             }
 
@@ -73,8 +73,8 @@ namespace ENetServer.NetObjects.DataObjects
                     return null;
                 }
 
-                string tempString = NetHelpers.GetString(bytes, 0, bytes.Length);
-                tempString = NetHelpers.FormatStringForSend(tempString);
+                string tempString = NetStatics.GetString(bytes, 0, bytes.Length);
+                tempString = NetStatics.FormatStringForSend(tempString);
                 return new TextDataObject(tempString);
             }
         }
