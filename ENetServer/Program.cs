@@ -2,7 +2,9 @@
 using ENetServer.NetObjects;
 using ENetServer.NetObjects.DataObjects;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
+using System.Reflection;
 
 namespace ENetServer
 {
@@ -62,6 +64,15 @@ namespace ENetServer
                         if (int.TryParse(inputSplit[1], out int duration) && duration > 0 && duration < 10)
                         {
                             RunGameObjectStressTest(duration);
+                        }
+                    }
+                    else if (inputSplit.Length > 0 && inputSplit[0] == "net")
+                    {
+                        if (inputSplit.Length < 2) continue;
+
+                        if (uint.TryParse(inputSplit[1], out uint numObjects))
+                        {
+                            RunNetworkStressTest(numObjects);
                         }
                     }
                     else
@@ -154,6 +165,9 @@ namespace ENetServer
         /// <param name="duration"> Duration in seconds to run the stress test. </param>
         public static void RunGameObjectStressTest(int duration)
         {
+            Console.WriteLine("[ACTION] Running GameDataObject creation stress test for {0}s...",
+                duration);
+
             int durationMS = duration * 1000;
             long counter = 0;
 
@@ -168,8 +182,78 @@ namespace ENetServer
             sw.Stop();
             sw.Reset();
             
-            Console.WriteLine("[LOG] Total number of GameDataObjects created during {0}s stress test: {1:n0}", duration, counter);
+            Console.WriteLine("[LOG] Total number of GameDataObjects created during {0}s stress test: {1:n0}",
+                duration, counter);
             Console.WriteLine("[LOG] Average per second: {0:n0}", counter / duration);
+        }
+
+        /// <summary>
+        /// Runs a total-system stress test with a specified number of objects passed along the
+        ///  networking system. Does not actually send messages, but simulates by re-queuing.
+        /// </summary>
+        /// <param name="numObjects"> Number of objects to pass through the networking system. </param>
+        public static void RunNetworkStressTest(uint numObjects)
+        {
+            Console.WriteLine("[ACTION] Running total-system network stress test with {0:n0} total objects...",
+                numObjects);
+
+            uint sendCounter = 0, recvCounter = 0;
+            Stopwatch sw = Stopwatch.StartNew();
+
+            // Run stress test until BOTH send and receive have dequeued all.
+            while (sendCounter < numObjects || recvCounter < numObjects)
+            {
+                if (sendCounter < numObjects)
+                {
+                    GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(numObjects.ToString());
+                    if (gameDataObject != null)
+                    {
+                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(numObjects, gameDataObject);
+                        NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+                        sendCounter++;
+
+                        if (sendCounter >= numObjects)
+                        {
+                            Console.WriteLine("[LOG] Send operations completed after {0}ms.",
+                                sw.ElapsedMilliseconds);
+                        }
+                    }
+                }
+
+                if (recvCounter < numObjects)
+                {
+                    // Using this while loop ensures that execution waits until the just-enqueued
+                    //  GameSendObject returns as a GameRecvObject (keeps queues minimum size).
+                    //while (NetworkManager.Instance.DequeueGameRecvObject() == null)
+                    //{
+
+                    //}
+                    //recvCounter++;
+
+                    // Using this if statement tries to dequeue, simply skipping if nothing to
+                    //  dequeue. Enqueuing operations are executed faster, and this method works
+                    //  as a means of seeing exactly how long it takes in total to complete
+                    //  receive operations that do not cause send operations to wait.
+                    if (NetworkManager.Instance.DequeueGameRecvObject() != null)
+                    {
+                        recvCounter++;
+                    }
+
+                    if (recvCounter >= numObjects)
+                    {
+                        Console.WriteLine("[LOG] Recv operations completed after {0}ms.",
+                            sw.ElapsedMilliseconds);
+                    }
+                }
+            }
+
+            // Stop and reset stopwatch, and log total elapsed time.
+            sw.Stop();
+            Console.WriteLine("[LOG] Total elapsed time for network stress test with {0:n0} messages: {1}ms",
+                numObjects, sw.ElapsedMilliseconds);
+            Console.WriteLine("[LOG] Average per second: {0:n0}",
+                numObjects / (sw.ElapsedMilliseconds / 1000.0f));
+            sw.Reset();
         }
     }
 }

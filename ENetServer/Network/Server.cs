@@ -115,6 +115,9 @@ namespace ENetServer.Management
         /// </summary>
         internal void DoNetSendTasks()
         {
+            // TODO: REMOVE THIS TEMP Connection
+            Connection connection = new(uint.MaxValue, "0.0.0.0", ushort.MaxValue);
+
             // Loop until network send queue is empty.
             while (!netSendQueue.IsEmpty)
             {
@@ -149,6 +152,18 @@ namespace ENetServer.Management
                             QueueSendAllExcept(netSendObject);
                             break;
                         }
+                    case SendType.TestSend:
+                        {
+                            // TODO: REMOVE THIS TEST CASE
+                            if (netSendObject.Bytes != null)
+                            {
+                                NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromTestRecv(
+                                    connection, netSendObject.Bytes);
+                                netRecvQueue.Enqueue(netRecvObject);
+                            }
+                            break;
+                        }
+                    // DO NOTHING FOR DEFAULT CASE
                 }
             }
         }

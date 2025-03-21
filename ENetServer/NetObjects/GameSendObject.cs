@@ -1,5 +1,6 @@
 ﻿using ENetServer.NetObjects.DataObjects;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +10,7 @@ using static ENetServer.NetStatics;
 namespace ENetServer.NetObjects
 {
     /// <summary>
-    /// Net object containing NON-SERIALIZED network data TO BE SENT over the network. Must use Factory to create objects.
+    /// Net object containing NON-SERIALIZED network data TO BE SENT over the network. Use GameSendObject.Factory to create objects.
     /// </summary>
     public class GameSendObject
     {
@@ -32,6 +33,8 @@ namespace ENetServer.NetObjects
         /// </summary>
         public static class Factory
         {
+            private static ConcurrentBag<GameSendObject> pool = [];
+
             /// <summary>
             /// Creates and returns a new GameSendObject formatted for disconnecting one client.
             ///  Requires only the ID of the peer to disconnect.
@@ -88,6 +91,19 @@ namespace ENetServer.NetObjects
             {
                 return new GameSendObject(SendType.Message_AllExcept, peerId, gameDataObject);
             }
+
+            /// <summary>
+            /// Creates and returns a new TEST GameSendObject, which is not sent over the network but
+            ///  instead is re-queued by the network thread.
+            /// </summary>
+            /// <param name="peerId"> TEST peer ID to simulate message send overhead. </param>
+            /// <param name="gameDataObject"> TEST GameDataObject to simulate message send overhead. </param>
+            /// <returns> The newly created TEST GameSendObject. </returns>
+            public static GameSendObject CreateTestSend(uint peerId, GameDataObject gameDataObject)
+            {
+                return new GameSendObject(SendType.TestSend, peerId, gameDataObject);
+            }
+
         }
     }
 }

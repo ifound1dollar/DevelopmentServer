@@ -3,11 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35527.113
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UDPServer", "UDPServer\UDPServer.csproj", "{147126DD-9ACB-465E-85F5-060413AD838F}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ENetServer", "ENetServer\ENetServer.csproj", "{3D3453CE-1141-4980-A15B-5BFA1D0E3E41}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TCPWebSocketServer", "TCPWebSocketServer\TCPWebSocketServer.csproj", "{550531AC-C04E-4699-A1A0-D0422E7B4E0A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,18 +11,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{147126DD-9ACB-465E-85F5-060413AD838F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{147126DD-9ACB-465E-85F5-060413AD838F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{147126DD-9ACB-465E-85F5-060413AD838F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{147126DD-9ACB-465E-85F5-060413AD838F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3D3453CE-1141-4980-A15B-5BFA1D0E3E41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3D3453CE-1141-4980-A15B-5BFA1D0E3E41}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3D3453CE-1141-4980-A15B-5BFA1D0E3E41}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3D3453CE-1141-4980-A15B-5BFA1D0E3E41}.Release|Any CPU.Build.0 = Release|Any CPU
-		{550531AC-C04E-4699-A1A0-D0422E7B4E0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{550531AC-C04E-4699-A1A0-D0422E7B4E0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{550531AC-C04E-4699-A1A0-D0422E7B4E0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{550531AC-C04E-4699-A1A0-D0422E7B4E0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

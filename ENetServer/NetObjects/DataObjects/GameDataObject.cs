@@ -49,11 +49,11 @@ namespace ENetServer.NetObjects.DataObjects
             // If argument GameDataObject is not null, serialize into byte[].
             byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
 
-            foreach (byte b in bytes)
-            {
-                Console.Write(b + " "); // TODO: REMOVE THIS TEMP TEST PRINT
-            }
-            Console.WriteLine();
+            //foreach (byte b in bytes)
+            //{
+            //    Console.Write(b + " "); // TODO: REMOVE THIS TEMP TEST PRINT
+            //}
+            //Console.WriteLine();
 
             // Return the GameDataObject serialized into a raw byte[].
             return bytes;

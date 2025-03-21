@@ -76,6 +76,20 @@ namespace ENetServer.Serialize
                             SendMessageAllExcept(gameSendObject);
                             break;
                         }
+                    case SendType.TestSend:
+                        {
+                            // TODO: REMOVE THIS TEST CASE
+                            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameSendObject.GameDataObject);
+                            if (bytes != null)
+                            {
+                                NetSendObject netSendObject = NetSendObject.Factory.CreateTestSend(
+                                    gameSendObject.PeerID, bytes);
+                                netSendQueue.Enqueue(netSendObject);
+                            }
+                            
+                            break;
+                        }
+                    // DO NOTHING FOR DEFAULT CASE
                 }
             }
         }
@@ -114,6 +128,19 @@ namespace ENetServer.Serialize
                             ReceiveMessage(netReceiveData);
                             break;
                         }
+                    case RecvType.TestRecv:
+                        {
+                            // TODO: REMOVE THIS TEST CASE
+                            GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(netReceiveData.Bytes);
+                            if (gameDataObject != null)
+                            {
+                                GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromTestRecv(
+                                    netReceiveData.Connection, gameDataObject);
+                                gameRecvQueue.Enqueue(gameRecvObject);
+                            }
+                            break;
+                        }
+                    // DO NOTHING FOR DEFAULT CASE
                 }
             }
         }

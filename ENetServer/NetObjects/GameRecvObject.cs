@@ -77,6 +77,18 @@ namespace ENetServer.NetObjects
             {
                 return new GameRecvObject(RecvType.Message, connection, gameDataObject);
             }
+
+            /// <summary>
+            /// Creates and returns a new TEST GameRecvObject, which was not actually received over the
+            ///  but was simply re-queued by the network thread.
+            /// </summary>
+            /// <param name="connection"> TEST Connection to simulate message receive overhead. </param>
+            /// <param name="gameDataObject"> TEST GameDataObject to simulate message receive overhead. </param>
+            /// <returns> The newly created TEST GameRecvObject. </returns>
+            internal static GameRecvObject CreateFromTestRecv(Connection connection, GameDataObject gameDataObject)
+            {
+                return new GameRecvObject(RecvType.TestRecv, connection, gameDataObject);
+            }
         }
     }
 }

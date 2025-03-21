@@ -77,6 +77,18 @@ namespace ENetServer.NetObjects
             {
                 return new NetRecvObject(RecvType.Message, connection, bytes);
             }
+
+            /// <summary>
+            /// Creates and returns a new TEST NetRecvObject, which was not actually received over the
+            ///  but was simply re-queued by the network thread.
+            /// </summary>
+            /// <param name="connection"> TEST Connection to simulate message receive overhead. </param>
+            /// <param name="bytes"> TEST byte[] to simulate message receive overhead. </param>
+            /// <returns> The newly created TEST GameRecvObject. </returns>
+            internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes)
+            {
+                return new NetRecvObject(RecvType.TestRecv, connection, bytes);
+            }
         }
     }
 }
