@@ -1,6 +1,7 @@
 ﻿using ENet;
 using ENetServer.NetObjects.DataObjects;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,13 +11,14 @@ using static ENetServer.NetStatics;
 namespace ENetServer.NetObjects
 {
     /// <summary>
-    /// Net object containing SERIALIZED network data TO BE SENT over the network. Must use Factory to create objects.
+    /// Net object containing SERIALIZED network data TO BE SENT over the network.
+    ///  Use NetSendObject.Factory to create objects.
     /// </summary>
     internal class NetSendObject
     {
-        internal SendType SendType { get; }
-        internal uint PeerID { get; }
-        internal byte[]? Bytes { get; }
+        internal SendType SendType { get; private set; }
+        internal uint PeerID { get; private set; }
+        internal byte[]? Bytes { get; private set; }
 
         private NetSendObject(SendType sendType, uint peerId, byte[]? bytes)
         {
@@ -25,14 +27,75 @@ namespace ENetServer.NetObjects
             Bytes = bytes;
         }
 
+        private NetSendObject()
+        {
+            SendType = SendType.None;
+            PeerID = 0;
+            Bytes = null;
+        }
+
+        private NetSendObject Reconstruct(SendType sendType, uint peerId, byte[]? bytes)
+        {
+            SendType = sendType;
+            PeerID = peerId;
+            Bytes = bytes;
+            return this;
+        }
+
+        private NetSendObject Reset()
+        {
+            SendType = SendType.None;
+            PeerID = 0;
+            Bytes = null;
+            return this;
+        }
+
 
 
         /// <summary>
-        /// Factory responsible for creating NetSendObjects. Each method in this class corresponds
-        ///  to one SendType.
+        /// Factory responsible for creating NetSendObjects. Each creator method corresponds to
+        ///  one SendType. Utilizes thread-safe static object pool.
         /// </summary>
         internal static class Factory
         {
+            #region Object Pool and Methods
+
+            private static readonly ConcurrentQueue<NetSendObject> pool = [];
+            private static int targetPoolSize = 0;
+
+            /// <summary>
+            /// Sets the target object pool size. Completely empties and re-populates pool.
+            /// </summary>
+            /// <param name="poolSize"> Target number of elements to hold in the pool. </param>
+            internal static void SetPoolSize(int poolSize)
+            {
+                // Completely empty pool, then fill pool with poolSize empty objects and set variable.
+                pool.Clear();
+                for (int i = 0; i < poolSize; i++)
+                {
+                    pool.Enqueue(new NetSendObject());
+                }
+                targetPoolSize = poolSize;
+            }
+
+            /// <summary>
+            /// Returns a NetSendObject to the static object pool. Should always be called after
+            ///  dequeuing and operating on a NetSendObject.
+            /// </summary>
+            /// <param name="netSendObject"> The NetSendObject to return to the pool. </param>
+            internal static void ReturnToPool(NetSendObject netSendObject)
+            {
+                // Return to pool ONLY IF current pool count is <= target pool size.
+                if (pool.Count <= targetPoolSize)
+                {
+                    pool.Enqueue(netSendObject.Reset());   // Reset object before returning to pool.
+                }
+            }
+
+            #endregion
+
+
+
             /// <summary>
             /// Creates and returns a new NetSendObject formatted for disconnecting one client.
             ///  Requires only the ID of the peer to disconnect.
@@ -41,6 +104,13 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'disconnect one' NetSendObject. </returns>
             internal static NetSendObject CreateDisconnectOne(uint peerId)
             {
+                // If successfully pulls from pool, re-initialize members and return the object.
+                //if (pool.TryDequeue(out var netSendObject))
+                //{
+                //    return netSendObject.Reconstruct(SendType.Disconnect_One, peerId, null);
+                //}
+
+                // Else if no object is available, create new.
                 return new NetSendObject(SendType.Disconnect_One, peerId, null);
             }
 
@@ -51,6 +121,13 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'disconnect all' NetSendObject. </returns>
             internal static NetSendObject CreateDisconnectAll()
             {
+                // If successfully pulls from pool, re-initialize members and return the object.
+                //if (pool.TryDequeue(out var netSendObject))
+                //{
+                //    return netSendObject.Reconstruct(SendType.Disconnect_All, 0, null);
+                //}
+
+                // Else if no object is available, create new.
                 return new NetSendObject(SendType.Disconnect_All, 0, null);
             }
 
@@ -63,6 +140,13 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'message one' NetSendObject. </returns>
             internal static NetSendObject CreateMessageOne(uint peerId, byte[] bytes)
             {
+                // If successfully pulls from pool, re-initialize members and return the object.
+                //if (pool.TryDequeue(out var netSendObject))
+                //{
+                //    return netSendObject.Reconstruct(SendType.Message_One, peerId, bytes);
+                //}
+
+                // Else if no object is available, create new.
                 return new NetSendObject(SendType.Message_One, peerId, bytes);
             }
 
@@ -75,6 +159,13 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'message all' NetSendObject. </returns>
             internal static NetSendObject CreateMessageAll(byte[] bytes)
             {
+                // If successfully pulls from pool, re-initialize members and return the object.
+                //if (pool.TryDequeue(out var netSendObject))
+                //{
+                //    return netSendObject.Reconstruct(SendType.Message_All, 0, bytes);
+                //}
+
+                // Else if no object is available, create new.
                 return new NetSendObject(SendType.Message_All, 0, bytes);
             }
 
@@ -87,6 +178,13 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'message all except' NetSendObject. </returns>
             internal static NetSendObject CreateMessageAllExcept(uint peerId, byte[] bytes)
             {
+                // If successfully pulls from pool, re-initialize members and return the object.
+                //if (pool.TryDequeue(out var netSendObject))
+                //{
+                //    return netSendObject.Reconstruct(SendType.Message_AllExcept, peerId, bytes);
+                //}
+
+                // Else if no object is available, create new.
                 return new NetSendObject(SendType.Message_AllExcept, peerId, bytes);
             }
 
@@ -99,6 +197,13 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created TEST NetSendObject. </returns>
             internal static NetSendObject CreateTestSend(uint peerId, byte[] bytes)
             {
+                // If successfully pulls from pool, re-initialize members and return the object.
+                //if (pool.TryDequeue(out var netSendObject))
+                //{
+                //    return netSendObject.Reconstruct(SendType.TestSend, peerId, bytes);
+                //}
+
+                // Else if no object is available, create new.
                 return new NetSendObject(SendType.TestSend, peerId, bytes);
             }
         }

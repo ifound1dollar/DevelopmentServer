@@ -61,7 +61,7 @@ namespace ENetServer
                     {
                         if (inputSplit.Length < 2) continue;
 
-                        if (int.TryParse(inputSplit[1], out int duration) && duration > 0 && duration < 10)
+                        if (int.TryParse(inputSplit[1], out int duration) && duration > 0 && duration <= 10)
                         {
                             RunGameObjectStressTest(duration);
                         }
@@ -205,7 +205,10 @@ namespace ENetServer
             {
                 if (sendCounter < numObjects)
                 {
-                    GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(numObjects.ToString());
+                    GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(sendCounter.ToString());
+                    //GameDataObject? gameDataObject = TransformDataObject.Factory.CreateFromDefault(sendCounter,
+                    //    [1.0d, 2.0d, 3.0d, 0.0d, 0.0d, 0.0d, 1.0d, 1.0d, 1.0d]);
+
                     if (gameDataObject != null)
                     {
                         GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(numObjects, gameDataObject);

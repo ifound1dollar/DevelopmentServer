@@ -72,6 +72,8 @@ namespace ENetServer.NetObjects.DataObjects
         /// </summary>
         public static class Factory
         {
+            //TODO: IMPLEMENT FACTORY HERE AND CHECK PERFORMANCE
+
             /// <summary>
             /// Attemps to create and return a new TransformDataObject from default/raw data. User should
             ///  verify success immediately after calling this method.

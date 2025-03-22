@@ -91,6 +91,9 @@ namespace ENetServer.Serialize
                         }
                     // DO NOTHING FOR DEFAULT CASE
                 }
+
+                // Return dequeued GameSendObject to the static object pool.
+                //GameSendObject.Factory.ReturnToPool(gameSendObject);
             }
         }
 
@@ -103,45 +106,48 @@ namespace ENetServer.Serialize
             while (!netRecvQueue.IsEmpty)
             {
                 // Try to dequeue item from netRecvQueue, operating on the item if successful.
-                if (!netRecvQueue.TryDequeue(out NetRecvObject? netReceiveData)) break;
+                if (!netRecvQueue.TryDequeue(out NetRecvObject? netReceiveObject)) break;
 
                 // Operate based on receive type.
-                switch (netReceiveData.RecvType)
+                switch (netReceiveObject.RecvType)
                 {
                     case RecvType.Connect:
                         {
-                            ReceiveConnect(netReceiveData);
+                            ReceiveConnect(netReceiveObject);
                             break;
                         }
                     case RecvType.Disconnect:
                         {
-                            ReceiveDisconnect(netReceiveData);
+                            ReceiveDisconnect(netReceiveObject);
                             break;
                         }
                     case RecvType.Timeout:
                         {
-                            ReceiveTimeout(netReceiveData);
+                            ReceiveTimeout(netReceiveObject);
                             break;
                         }
                     case RecvType.Message:
                         {
-                            ReceiveMessage(netReceiveData);
+                            ReceiveMessage(netReceiveObject);
                             break;
                         }
                     case RecvType.TestRecv:
                         {
                             // TODO: REMOVE THIS TEST CASE
-                            GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(netReceiveData.Bytes);
+                            GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(netReceiveObject.Bytes);
                             if (gameDataObject != null)
                             {
                                 GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromTestRecv(
-                                    netReceiveData.Connection, gameDataObject);
+                                    netReceiveObject.Connection, gameDataObject);
                                 gameRecvQueue.Enqueue(gameRecvObject);
                             }
                             break;
                         }
                     // DO NOTHING FOR DEFAULT CASE
                 }
+
+                // Return dequeued NetRecvObject to the static object pool.
+                //NetRecvObject.Factory.ReturnToPool(netReceiveObject);
             }
         }
 
@@ -252,36 +258,39 @@ namespace ENetServer.Serialize
             while (!gameRecvQueue.IsEmpty)
             {
                 // Try to dequeue item from gameRecvQueue, operating on the item if successful.
-                if (!gameRecvQueue.TryDequeue(out GameRecvObject? gameReceiveData)) break;
+                if (!gameRecvQueue.TryDequeue(out GameRecvObject? gameRecvObject)) break;
 
                 // Operate based on receive type.
-                switch (gameReceiveData.RecvType)
+                switch (gameRecvObject.RecvType)
                 {
                     case RecvType.Connect:
                         {
-                            Console.WriteLine("[CONNECT] Client connected - ID: " + gameReceiveData.Connection.ID +
-                                ", Address: " + gameReceiveData.Connection.IP + ":" + gameReceiveData.Connection.Port);
+                            Console.WriteLine("[CONNECT] Client connected - ID: " + gameRecvObject.Connection.ID +
+                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
                             break;
                         }
                     case RecvType.Disconnect:
                         {
-                            Console.WriteLine("[DISCONNECT] Client disconnected - ID: " + gameReceiveData.Connection.ID +
-                                ", Address: " + gameReceiveData.Connection.IP + ":" + gameReceiveData.Connection.Port);
+                            Console.WriteLine("[DISCONNECT] Client disconnected - ID: " + gameRecvObject.Connection.ID +
+                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
                             break;
                         }
                     case RecvType.Timeout:
                         {
-                            Console.WriteLine("[TIMEOUT] Client timed out - ID: " + gameReceiveData.Connection.ID +
-                                ", Address: " + gameReceiveData.Connection.IP + ":" + gameReceiveData.Connection.Port);
+                            Console.WriteLine("[TIMEOUT] Client timed out - ID: " + gameRecvObject.Connection.ID +
+                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
                             break;
                         }
                     case RecvType.Message:
                         {
-                            Console.WriteLine("[MESSAGE] Packet received from - ID: " + gameReceiveData.Connection.ID +
-                                ", Message: " + gameReceiveData.GameDataObject?.GetDescription());
+                            Console.WriteLine("[MESSAGE] Packet received from - ID: " + gameRecvObject.Connection.ID +
+                                ", Message: " + gameRecvObject.GameDataObject?.GetDescription());
                             break;
                         }
                 }
+
+                // Return dequeued GameRecvObject to the static object pool.
+                //GameRecvObject.Factory.ReturnToPool(gameRecvObject);
             }
         }
     }

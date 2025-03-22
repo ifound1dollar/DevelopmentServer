@@ -92,6 +92,12 @@ namespace ENetServer
             serializeWorker = new SerializeWorker();
             serverWorker = new ServerWorker();
 
+            // Initialize NetObject object pools to decently-large size for server.
+            //GameSendObject.Factory.SetPoolSize(100);
+            //GameRecvObject.Factory.SetPoolSize(100);
+            //NetSendObject.Factory.SetPoolSize(100);
+            //NetRecvObject.Factory.SetPoolSize(100);
+
             state = State.Initialized;
         }
 
@@ -110,6 +116,12 @@ namespace ENetServer
             IsServer = false;
             serializeWorker = new SerializeWorker();
             clientWorker = new ClientWorker();
+
+            // Initialize NetObject object pools to smaller size for client.
+            //GameSendObject.Factory.SetPoolSize(100);
+            //GameRecvObject.Factory.SetPoolSize(100);
+            //NetSendObject.Factory.SetPoolSize(100);
+            //NetRecvObject.Factory.SetPoolSize(100);
 
             state = State.Initialized;
         }
@@ -186,6 +198,28 @@ namespace ENetServer
         {
             // Try to dequeue one, returning the result if successful or null if failed.
             return GameRecvQueue.TryDequeue(out GameRecvObject? result) ? result : null;
+        }
+
+        /// <summary>
+        /// Dequeues all GameRecvObjects in the queue at the instant this is called and returns
+        ///  as an array. Any objects enqueued during this method's execution will not be dequeued.
+        /// </summary>
+        /// <returns> The array of GameRecvObjects pulled from the queue. </returns>
+        public GameRecvObject?[] DequeueAllGameRecvObjects()
+        {
+            // Store current number of items in the queue, then create an array of exactly this size.
+            int count = GameRecvQueue.Count;
+            GameRecvObject?[] tempArray = new GameRecvObject[count];
+
+            // Dequeue and add to array the stored number of queued items. Will ignore any items
+            //  added to the queue while this method is executing (prevents potential infinite block).
+            for (int i = 0; i < count; i++)
+            {
+                GameRecvQueue.TryDequeue(out GameRecvObject? gameRecvObject);
+                tempArray[i] = gameRecvObject;
+            }
+
+            return tempArray;
         }
 
 

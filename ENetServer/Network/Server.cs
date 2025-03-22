@@ -155,6 +155,8 @@ namespace ENetServer.Management
                     case SendType.TestSend:
                         {
                             // TODO: REMOVE THIS TEST CASE
+                            Peers.GetValueOrDefault(netSendObject.PeerID);  // SIMULATE GETTING PEER FOR ACTUAL SEND
+
                             if (netSendObject.Bytes != null)
                             {
                                 NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromTestRecv(
@@ -165,6 +167,9 @@ namespace ENetServer.Management
                         }
                     // DO NOTHING FOR DEFAULT CASE
                 }
+
+                // Return the dequeued NetSendObject to the static object pool.
+                //NetSendObject.Factory.ReturnToPool(netSendObject);
             }
         }
 
