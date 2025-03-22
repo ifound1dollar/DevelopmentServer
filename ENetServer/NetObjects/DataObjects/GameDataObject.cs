@@ -33,6 +33,8 @@ namespace ENetServer.NetObjects.DataObjects
         public abstract byte[] Serialize();
         public abstract string GetDescription();
 
+        public abstract void ReturnToPool();
+
 
 
         /// <summary>
@@ -48,6 +50,9 @@ namespace ENetServer.NetObjects.DataObjects
 
             // If argument GameDataObject is not null, serialize into byte[].
             byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
+
+            // Return the passed-in GameDataObject to its object pool.
+            dataObject.ReturnToPool();
 
             //foreach (byte b in bytes)
             //{

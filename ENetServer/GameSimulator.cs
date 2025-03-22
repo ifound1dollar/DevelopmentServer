@@ -143,6 +143,12 @@ namespace ENetServer
                         }
                     // DO NOTHING WITH DEFAULT CASE
                 }
+
+                // If GameDataObject is not null, return it to its object pool.
+                if (gameRecvObject.GameDataObject != null)
+                {
+                    gameRecvObject.GameDataObject.ReturnToPool();
+                }
             }
         }
     }

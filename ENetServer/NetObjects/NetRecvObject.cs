@@ -56,7 +56,7 @@ namespace ENetServer.NetObjects
 
 
         /// <summary>
-        /// Factory responsible for creating NetworkRecvObjects. Each creator method corresponds to
+        /// Factory responsible for creating NetRecvObjects. Each creator method corresponds to
         ///  one RecvType. Utilizes thread-safe static object pool.
         /// </summary>
         internal static class Factory
@@ -100,11 +100,11 @@ namespace ENetServer.NetObjects
 
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'connect' ENet event. Requires only
+            /// Creates and returns a new NetRecvObject from a 'connect' ENet event. Requires only
             ///  peer information (no byte[] payload).
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just connected. </param>
-            /// <returns> The newly created 'connect' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'connect' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromConnect(Connection connection)
             {
                 // If successfully pulls from pool, re-initialize members and return the object.
@@ -118,11 +118,11 @@ namespace ENetServer.NetObjects
             }
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'disconnect' ENet event. Requires
+            /// Creates and returns a new NetRecvObject from a 'disconnect' ENet event. Requires
             ///  only peer information (no byte[] payload).
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just disconnected. </param>
-            /// <returns> The newly created 'disconnect' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'disconnect' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromDisconnect(Connection connection)
             {
                 // If successfully pulls from pool, re-initialize members and return the object.
@@ -136,11 +136,11 @@ namespace ENetServer.NetObjects
             }
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'timeout' ENet event. Requires
+            /// Creates and returns a new NetRecvObject from a 'timeout' ENet event. Requires
             ///  only peer information (no byte[] payload).
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just timed out. </param>
-            /// <returns> The newly created 'timeout' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'timeout' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromTimeout(Connection connection)
             {
                 // If successfully pulls from pool, re-initialize members and return the object.
@@ -154,12 +154,12 @@ namespace ENetServer.NetObjects
             }
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'message' ENet event. Requires
+            /// Creates and returns a new NetRecvObject from a 'message' ENet event. Requires
             ///  peer information and byte[] payload of incoming message packet.
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that message was received from. </param>
             /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
-            /// <returns> The newly created 'message' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'message' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes)
             {
                 // If successfully pulls from pool, re-initialize members and return the object.
@@ -178,7 +178,7 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="connection"> TEST Connection to simulate message receive overhead. </param>
             /// <param name="bytes"> TEST byte[] to simulate message receive overhead. </param>
-            /// <returns> The newly created TEST GameRecvObject. </returns>
+            /// <returns> The newly created TEST NetRecvObject. </returns>
             internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes)
             {
                 // If successfully pulls from pool, re-initialize members and return the object.

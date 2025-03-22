@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -36,13 +37,40 @@ namespace ENetServer.NetObjects.DataObjects
 
     public class TransformDataObject : GameDataObject
     {
-        public uint ActorID { get; }
-        public double[] Doubles { get; }
+        private static readonly ConcurrentQueue<TransformDataObject> pool = [];
+        private static int targetPoolSize = 100;    // TEMP DEFAULT SIZE
+
+        public uint ActorID { get; private set; }
+        public double[] Doubles { get; private set; }
 
         private TransformDataObject(uint actorId, double[] doubles) : base(DataType.Transform)
         {
             ActorID = actorId;
             Doubles = doubles;
+        }
+
+        private TransformDataObject() : base(DataType.Transform)
+        {
+            ActorID = 0;
+            Doubles = new double[0];
+        }
+
+        private TransformDataObject Reconstruct(uint actorId, double[] doubles)
+        {
+            ActorID = actorId;
+            Doubles = doubles;
+            return this;
+        }
+
+        public override void ReturnToPool()
+        {
+            ActorID = 0;
+            Doubles = new double[0];
+            
+            if (pool.Count < targetPoolSize)
+            {
+                pool.Enqueue(this);
+            }
         }
 
 
@@ -72,7 +100,22 @@ namespace ENetServer.NetObjects.DataObjects
         /// </summary>
         public static class Factory
         {
-            //TODO: IMPLEMENT FACTORY HERE AND CHECK PERFORMANCE
+            /// <summary>
+            /// Sets the target object pool size. Completely empties and re-populates pool.
+            /// </summary>
+            /// <param name="poolSize"> Target number of elements to hold in the pool. </param>
+            internal static void SetPoolSize(int poolSize)
+            {
+                // Completely empty pool, then fill pool with poolSize empty objects and set variable.
+                pool.Clear();
+                for (int i = 0; i < poolSize; i++)
+                {
+                    pool.Enqueue(new TransformDataObject());
+                }
+                targetPoolSize = poolSize;
+            }
+
+
 
             /// <summary>
             /// Attemps to create and return a new TransformDataObject from default/raw data. User should
@@ -89,7 +132,13 @@ namespace ENetServer.NetObjects.DataObjects
                     return null;
                 }
 
-                // If data is valid, create a new TransformDataObject instance and return it.
+                // If successfully pulls from pool, re-initialize members and return the object.
+                if (pool.TryDequeue(out var transformDataObject))
+                {
+                    return transformDataObject.Reconstruct(actorId, doubles);
+                }
+
+                // Else if no object is available, create new.
                 return new TransformDataObject(actorId, doubles);
             }
 
@@ -109,6 +158,14 @@ namespace ENetServer.NetObjects.DataObjects
 
                 uint actorId = NetStatics.GetUInt(bytes, 1);
                 double[] doubles = NetStatics.GetDoubles(bytes, 5, bytes.Length - 5);
+
+                // If successfully pulls from pool, re-initialize members and return the object.
+                if (pool.TryDequeue(out var transformDataObject))
+                {
+                    return transformDataObject.Reconstruct(actorId, doubles);
+                }
+
+                // Else if no object is available, create new.
                 return new TransformDataObject(actorId, doubles);
             }
         }

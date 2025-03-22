@@ -17,7 +17,7 @@ namespace ENetServer.Serialize
         private readonly ConcurrentQueue<GameSendObject> gameSendQueue;
         private readonly ConcurrentQueue<NetSendObject> netSendQueue;
         private readonly ConcurrentQueue<GameRecvObject> gameRecvQueue;
-        private readonly ConcurrentQueue<NetRecvObject> netRecvQueue;
+        private readonly ConcurrentQueue<NetObjects.NetRecvObject> netRecvQueue;
 
         /// <summary>
         /// Constructs a Serializer object with references to game AND network concurrent queues.
@@ -27,7 +27,7 @@ namespace ENetServer.Serialize
         internal Serializer(ConcurrentQueue<GameSendObject> gameSendQueue,
             ConcurrentQueue<NetSendObject> netSendQueue,
             ConcurrentQueue<GameRecvObject> gameRecvQueue,
-            ConcurrentQueue<NetRecvObject> netRecvQueue)
+            ConcurrentQueue<NetObjects.NetRecvObject> netRecvQueue)
         {
             this.gameSendQueue = gameSendQueue;
             this.netSendQueue = netSendQueue;
@@ -106,7 +106,7 @@ namespace ENetServer.Serialize
             while (!netRecvQueue.IsEmpty)
             {
                 // Try to dequeue item from netRecvQueue, operating on the item if successful.
-                if (!netRecvQueue.TryDequeue(out NetRecvObject? netReceiveObject)) break;
+                if (!netRecvQueue.TryDequeue(out NetObjects.NetRecvObject? netReceiveObject)) break;
 
                 // Operate based on receive type.
                 switch (netReceiveObject.RecvType)
@@ -213,28 +213,28 @@ namespace ENetServer.Serialize
 
         #region Receive Methods
 
-        private void ReceiveConnect(NetRecvObject recvObject)
+        private void ReceiveConnect(NetObjects.NetRecvObject recvObject)
         {
             // Simply pass incoming connect object to main/game thread to be handled there.
             GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromConnect(recvObject.Connection);
             gameRecvQueue.Enqueue(gameRecvObject);
         }
 
-        private void ReceiveDisconnect(NetRecvObject recvObject)
+        private void ReceiveDisconnect(NetObjects.NetRecvObject recvObject)
         {
             // Simply pass incoming disconnect object to main/game thread to be handled there.
             GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromDisconnect(recvObject.Connection);
             gameRecvQueue.Enqueue(gameRecvObject);
         }
 
-        private void ReceiveTimeout(NetRecvObject recvObject)
+        private void ReceiveTimeout(NetObjects.NetRecvObject recvObject)
         {
             // Simply pass incoming timeout object to main/game thread to be handled there.
             GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromTimeout(recvObject.Connection);
             gameRecvQueue.Enqueue(gameRecvObject);
         }
 
-        private void ReceiveMessage(NetRecvObject recvObject)
+        private void ReceiveMessage(NetObjects.NetRecvObject recvObject)
         {
             // Attempt to deserialize received byte[] into GameDataObject. Log error and return if failure.
             GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(recvObject.Bytes);

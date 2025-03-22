@@ -4,7 +4,7 @@ Exploratory multithreaded C# networking solution built around the ENet networkin
 
 ---
 
-**The main project in this solution is ENetServer, a threaded networking prototype using ENet designed for use in the context of multiplayer video games. It utilizes three separate threads:**
+**The main project in this solution is NetworkManager, a threaded networking prototype using ENet designed for use in the context of multiplayer video games. It utilizes three separate threads:**
 1. Main thread (or the game thread in game engines like Unity and Unreal Engine)
 2. Serialization/deserialization thread
 3. Network thread
@@ -41,4 +41,11 @@ Linear operation (enqueue all objects, then dequeue all objects individually):
 Fully parallel operation:
 * Send operations completed after ~5000-5500ms
 * Receive operations completed after ~8000-8500ms
+* Average round-trip operations per second: ~1.2-1.25 million
+
+**Multi-threaded implementation with GameDataObject static object pools, 10,000,000 Text GameDataObjects:**
+
+Fully parallel operation:
+* Send operations completed after ~5000-5500ms
+* Receive operations completed after about ~8000-8500ms
 * Average round-trip operations per second: ~1.2-1.25 million

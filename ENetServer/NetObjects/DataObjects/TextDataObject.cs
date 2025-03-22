@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,11 +9,35 @@ namespace ENetServer.NetObjects.DataObjects
 {
     public class TextDataObject : GameDataObject
     {
-        public string String { get; }
+        private static readonly ConcurrentQueue<TextDataObject> pool = [];
+        private static int targetPoolSize = 100;    // TEMP DEFAULT SIZE
+
+        public string String { get; private set; }
 
         private TextDataObject(string str) : base(DataType.Text)
         {
             String = str;
+        }
+
+        private TextDataObject() : base(DataType.Text)
+        {
+            String = string.Empty;
+        }
+
+        private TextDataObject Reconstruct(string str)
+        {
+            String = str;
+            return this;
+        }
+
+        public override void ReturnToPool()
+        {
+            String = string.Empty;
+
+            if (pool.Count < targetPoolSize)
+            {
+                pool.Enqueue(this);
+            }
         }
 
 
@@ -42,6 +67,23 @@ namespace ENetServer.NetObjects.DataObjects
         public static class Factory
         {
             /// <summary>
+            /// Sets the target object pool size. Completely empties and re-populates pool.
+            /// </summary>
+            /// <param name="poolSize"> Target number of elements to hold in the pool. </param>
+            internal static void SetPoolSize(int poolSize)
+            {
+                // Completely empty pool, then fill pool with poolSize empty objects and set variable.
+                pool.Clear();
+                for (int i = 0; i < poolSize; i++)
+                {
+                    pool.Enqueue(new TextDataObject());
+                }
+                targetPoolSize = poolSize;
+            }
+
+
+
+            /// <summary>
             /// Attemps to create and return a new TextDataObject from default/raw data. User should
             ///  verify success immediately after calling this method.
             /// </summary>
@@ -55,8 +97,16 @@ namespace ENetServer.NetObjects.DataObjects
                     return null;
                 }
 
-                string temp = NetStatics.FormatStringForSend(str);
-                return new TextDataObject(temp);
+                string tempString = NetStatics.FormatStringForSend(str);
+
+                // If successfully pulls from pool, re-initialize members and return the object.
+                if (pool.TryDequeue(out var transformDataObject))
+                {
+                    return transformDataObject.Reconstruct(tempString);
+                }
+
+                // Else if no object is available, create new.
+                return new TextDataObject(tempString);
             }
 
             /// <summary>
@@ -75,6 +125,14 @@ namespace ENetServer.NetObjects.DataObjects
 
                 string tempString = NetStatics.GetString(bytes, 0, bytes.Length);
                 tempString = NetStatics.FormatStringForSend(tempString);
+
+                // If successfully pulls from pool, re-initialize members and return the object.
+                if (pool.TryDequeue(out var transformDataObject))
+                {
+                    return transformDataObject.Reconstruct(tempString);
+                }
+
+                // Else if no object is available, create new.
                 return new TextDataObject(tempString);
             }
         }

@@ -249,9 +249,13 @@ namespace ENetServer
                     //  dequeue. Enqueuing operations are executed faster, and this method works
                     //  as a means of seeing exactly how long it takes in total to complete
                     //  receive operations that do not cause send operations to wait.
-                    if (NetworkManager.Instance.DequeueGameRecvObject() != null)
+                    GameRecvObject? gameRecvObject;
+                    if ((gameRecvObject = NetworkManager.Instance.DequeueGameRecvObject()) != null)
                     {
                         recvCounter++;
+
+                        // Return GameDataObject to its pool if not null.
+                        gameRecvObject.GameDataObject?.ReturnToPool();
                     }
 
                     if (recvCounter >= numObjects)
