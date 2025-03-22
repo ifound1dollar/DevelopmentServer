@@ -10,6 +10,8 @@ namespace ENetServer
 {
     internal class Program
     {
+        private static GameSimulatorWorker GameSimulator { get; set; } = new();
+
         static void Main(string[] args)
         {
             // Wrap entire main function in try-catch-finally to ensure ENet is deinitialized at exit.
@@ -31,6 +33,9 @@ namespace ENetServer
                 NetworkManager.Instance.SetupAsServer();
                 //NetworkManager.Instance.SetupAsClient();
                 NetworkManager.Instance.StartThreadedOperations();
+
+                // Setup and run GameSimulator.
+                GameSimulator.StartThread();
 
                 // Main thread input loop.
                 string? inputRaw;
@@ -63,7 +68,9 @@ namespace ENetServer
 
                         if (int.TryParse(inputSplit[1], out int duration) && duration > 0 && duration <= 10)
                         {
+                            GameSimulator.PauseThread();
                             RunGameObjectStressTest(duration);
+                            GameSimulator.ResumeThread();
                         }
                     }
                     else if (inputSplit.Length > 0 && inputSplit[0] == "net")
@@ -72,7 +79,9 @@ namespace ENetServer
 
                         if (uint.TryParse(inputSplit[1], out uint numObjects))
                         {
-                            RunNetworkStressTest(numObjects);
+                            GameSimulator.PauseThread();
+                            RunTotalSystemStressTest(numObjects);
+                            GameSimulator.ResumeThread();
                         }
                     }
                     else
@@ -84,8 +93,11 @@ namespace ENetServer
                     Thread.Sleep(100);
                 }
 
-                // After loop exits, stop the worker thread (blocks here).
+                // After loop exits, stop the NetworkManager threaded operations (blocks here).
                 NetworkManager.Instance.StopThreadedOperations();
+
+                // Also stop GameSimulator.
+                GameSimulator.StopThread();
             }
             catch (Exception e)
             {
@@ -192,7 +204,7 @@ namespace ENetServer
         ///  networking system. Does not actually send messages, but simulates by re-queuing.
         /// </summary>
         /// <param name="numObjects"> Number of objects to pass through the networking system. </param>
-        public static void RunNetworkStressTest(uint numObjects)
+        public static void RunTotalSystemStressTest(uint numObjects)
         {
             Console.WriteLine("[ACTION] Running total-system network stress test with {0:n0} total objects...",
                 numObjects);

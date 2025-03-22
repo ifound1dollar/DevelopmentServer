@@ -284,9 +284,6 @@ namespace ENetServer
 
                     // Reads from network receive queue, deserializes, adds to game in queue.
                     serializer.DoNetToGameTasks();
-
-                    // TODO: REMOVE MAIN THREAD SIMULATION METHOD AND CALL WHEN LIBRARY IS READY
-                    //serializer.SimulateMainThreadDequeue();
                 }
             }
         }

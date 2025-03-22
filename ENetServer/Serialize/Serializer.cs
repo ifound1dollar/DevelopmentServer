@@ -173,7 +173,7 @@ namespace ENetServer.Serialize
             byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
             if (bytes == null)
             {
-                Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
                 return;
             }
 
@@ -187,7 +187,7 @@ namespace ENetServer.Serialize
             byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
             if (bytes == null)
             {
-                Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
                 return;
             }
 
@@ -201,7 +201,7 @@ namespace ENetServer.Serialize
             byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
             if (bytes == null)
             {
-                Console.WriteLine("[ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
                 return;
             }
 
@@ -217,18 +217,21 @@ namespace ENetServer.Serialize
         {
             // Simply pass incoming connect object to main/game thread to be handled there.
             GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromConnect(recvObject.Connection);
+            gameRecvQueue.Enqueue(gameRecvObject);
         }
 
         private void ReceiveDisconnect(NetRecvObject recvObject)
         {
             // Simply pass incoming disconnect object to main/game thread to be handled there.
             GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromDisconnect(recvObject.Connection);
+            gameRecvQueue.Enqueue(gameRecvObject);
         }
 
         private void ReceiveTimeout(NetRecvObject recvObject)
         {
             // Simply pass incoming timeout object to main/game thread to be handled there.
             GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromTimeout(recvObject.Connection);
+            gameRecvQueue.Enqueue(gameRecvObject);
         }
 
         private void ReceiveMessage(NetRecvObject recvObject)
@@ -237,7 +240,7 @@ namespace ENetServer.Serialize
             GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(recvObject.Bytes);
             if (gameDataObject == null)
             {
-                Console.WriteLine("[ERROR] Failed to deserialize data received from peer ID {0}. Discarding.",
+                Console.WriteLine("[SERIALIZER_ERROR] Failed to deserialize data received from peer ID {0}. Discarding.",
                     recvObject.Connection.ID);
                 return;
             }
@@ -249,49 +252,5 @@ namespace ENetServer.Serialize
 
         #endregion
 
-        /// <summary>
-        /// Simulates the main/game thread dequeuing GameRecvObjects. This is a temporary development method.
-        /// </summary>
-        internal void SimulateMainThreadDequeue()
-        {
-            // Loop until game receive queue is empty.
-            while (!gameRecvQueue.IsEmpty)
-            {
-                // Try to dequeue item from gameRecvQueue, operating on the item if successful.
-                if (!gameRecvQueue.TryDequeue(out GameRecvObject? gameRecvObject)) break;
-
-                // Operate based on receive type.
-                switch (gameRecvObject.RecvType)
-                {
-                    case RecvType.Connect:
-                        {
-                            Console.WriteLine("[CONNECT] Client connected - ID: " + gameRecvObject.Connection.ID +
-                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
-                            break;
-                        }
-                    case RecvType.Disconnect:
-                        {
-                            Console.WriteLine("[DISCONNECT] Client disconnected - ID: " + gameRecvObject.Connection.ID +
-                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
-                            break;
-                        }
-                    case RecvType.Timeout:
-                        {
-                            Console.WriteLine("[TIMEOUT] Client timed out - ID: " + gameRecvObject.Connection.ID +
-                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
-                            break;
-                        }
-                    case RecvType.Message:
-                        {
-                            Console.WriteLine("[MESSAGE] Packet received from - ID: " + gameRecvObject.Connection.ID +
-                                ", Message: " + gameRecvObject.GameDataObject?.GetDescription());
-                            break;
-                        }
-                }
-
-                // Return dequeued GameRecvObject to the static object pool.
-                //GameRecvObject.Factory.ReturnToPool(gameRecvObject);
-            }
-        }
     }
 }

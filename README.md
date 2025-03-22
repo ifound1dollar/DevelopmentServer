@@ -24,8 +24,8 @@ The below section contains various performance documentation from tests during d
 
 Fully parallel operation (one enqueue and one dequeue attempt per while loop iteration):
 * Send operations completed after ~3000-4000ms
-* Receive operations completed after ~6500-7000ms
-* Average round-trip operations per second: ~1.45-1.5 million
+* Receive operations completed after ~7000ms
+* Average round-trip operations per second: ~1.4-1.5 million
 
 Parallel operation with explicit wait to dequeue (enqueue one then block until that item is dequeued, each iteration):
 * Send and receive operations (both enqueue and dequeue happening in same while loop iteration) completed after ~12500-13000ms
