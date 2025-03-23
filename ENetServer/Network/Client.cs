@@ -283,10 +283,10 @@ namespace ENetServer.Network
             // Queue connect to remote address.
             try
             {
-                Peer? temp = clientHost?.Connect(remoteAddress);
-                if (temp != null)
+                Peer? pendingPeer = clientHost?.Connect(remoteAddress);
+                if (pendingPeer != null)
                 {
-                    AllPeers.Add(temp.Value);
+                    AllPeers.Add(pendingPeer.Value);
                 }
             }
             catch (InvalidOperationException ex)
@@ -326,12 +326,6 @@ namespace ENetServer.Network
                 if (peer.State != PeerState.Connected) continue;
 
                 // Disconnect with no additional data.
-                peer.Disconnect(0u);
-            }
-
-            // TODO: Remove TEMP disconnect every single Peer, regardless of state.
-            foreach (var peer in AllPeers)
-            {
                 peer.Disconnect(0u);
             }
         }
