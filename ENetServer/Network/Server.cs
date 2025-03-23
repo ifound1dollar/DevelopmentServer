@@ -40,6 +40,7 @@ namespace ENetServer.Network
         /// Map of all connected peers in form ID:PeerConnection. Contains both clients and servers.
         /// </summary>
         private Dictionary<uint, PeerConnection> Connections { get; } = new();
+        private HashSet<Peer> AllPeers { get; } = new();
 
         internal Address GetAddress()
         {
@@ -289,7 +290,11 @@ namespace ENetServer.Network
             // Queue connect to remote address.
             try
             {
-                serverHost?.Connect(remoteAddress);
+                Peer? temp = serverHost?.Connect(remoteAddress);
+                if (temp != null)
+                {
+                    AllPeers.Add(temp.Value);
+                }
             }
             catch (InvalidOperationException ex)
             {
@@ -316,7 +321,7 @@ namespace ENetServer.Network
                 if (peer.State != PeerState.Connected) return;
 
                 // Disconnect with default data value.
-                peer.Disconnect(0);
+                peer.Disconnect(0u);
             }
         }
 
@@ -338,7 +343,13 @@ namespace ENetServer.Network
                 if (peer.State != PeerState.Connected) continue;
 
                 // Disconnect with default data value.
-                peer.Disconnect(0);
+                peer.Disconnect(0u);
+            }
+
+            // TODO: Remove TEMP disconnect every single Peer, regardless of state.
+            foreach (var peer in AllPeers)
+            {
+                peer.Disconnect(0u);
             }
         }
 
@@ -439,6 +450,8 @@ namespace ENetServer.Network
             // Create new PeerConnection and add to correct map.
             PeerConnection peerConnection = new(connectEvent.Peer, isServer);
             Connections.Add(peerConnection.Peer.ID, peerConnection);
+
+            AllPeers.Add(connectEvent.Peer);
 
             // Enqueue connect object with new peer's Connection for use by other threads.
             NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(peerConnection.Connection);

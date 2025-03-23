@@ -42,13 +42,14 @@ namespace ENetServer.Network
         /// </summary>
         private Dictionary<uint, PeerConnection> Connections { get; } = new();
         private Peer PrimaryServerPeer { get; set; }
+        private HashSet<Peer> AllPeers { get; } = new();
 
         internal Address GetAddress()
         {
             return address;
         }
 
-
+        
 
         #region Setup / Start / Stop / Run Operations
 
@@ -264,9 +265,10 @@ namespace ENetServer.Network
         {
             // Verify not trying to connect to a Host already connected to.
             string ip = netSendObject.Connection.IP;
+            ushort port = netSendObject.Connection.Port;
             foreach (var peerConnection in Connections)
             {
-                if (peerConnection.Value.Connection.IP == ip)
+                if (peerConnection.Value.Connection.IP == ip && peerConnection.Value.Connection.Port == port)
                 {
                     Console.WriteLine("[ERROR] Attempted to connect to an existing Connection. Aborting.");
                     return;
@@ -281,7 +283,11 @@ namespace ENetServer.Network
             // Queue connect to remote address.
             try
             {
-                clientHost?.Connect(remoteAddress);
+                Peer? temp = clientHost?.Connect(remoteAddress);
+                if (temp != null)
+                {
+                    AllPeers.Add(temp.Value);
+                }
             }
             catch (InvalidOperationException ex)
             {
@@ -312,14 +318,20 @@ namespace ENetServer.Network
         /// </summary>
         internal void QueueDisconnectAll(NetSendObject netSendObject)
         {
-            // Iterate over all servers, sending disconnect request to all that are connected.
+            // Iterate over all Connections, sending disconnect request to all that are connected.
             foreach (var peerConnection in Connections)
             {
                 // Verify that the peer is valid.
                 Peer peer = peerConnection.Value.Peer;
                 if (peer.State != PeerState.Connected) continue;
 
-                // Disconnect with default data value.
+                // Disconnect with no additional data.
+                peer.Disconnect(0u);
+            }
+
+            // TODO: Remove TEMP disconnect every single Peer, regardless of state.
+            foreach (var peer in AllPeers)
+            {
                 peer.Disconnect(0u);
             }
         }
@@ -380,6 +392,8 @@ namespace ENetServer.Network
             // Create new PeerConnection and add to map. New connections as client are always servers.
             PeerConnection peerConnection = new(connectEvent.Peer, true);
             Connections.Add(peerConnection.Peer.ID, peerConnection);
+
+            AllPeers.Add(connectEvent.Peer);
 
             // Enqueue connect object with new peer's Connection for use by other threads.
             NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(peerConnection.Connection);

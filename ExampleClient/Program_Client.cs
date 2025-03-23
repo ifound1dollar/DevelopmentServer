@@ -90,6 +90,7 @@ namespace ClientExample
 
                         if (ushort.TryParse(inputSplit[1], out ushort port))
                         {
+                            if ((validPort && port == argPort) || port == 8888) continue;
                             ClientConnectToServer("127.0.0.1", port);
                         }
                     }
@@ -136,7 +137,7 @@ namespace ClientExample
         {
             Console.WriteLine("[ACTION] Attempting to connect to remote host at {0}:{1}...", ip, port);
 
-            // First verify that we are not already connected to a host with this information.
+            // First, verify that we are not already connected to a host with this information.
             var temp = GameSimulator.Connections.ToArray();
             foreach (var client in temp)
             {
