@@ -61,7 +61,14 @@ namespace ENetServer.NetObjects.DataObjects
 
         public override string GetDescription()
         {
-            return "TransformDataObject TEMP description.";
+            StringBuilder sb = new();
+            sb.Append("[TransformDataObject] ActorID: " + ActorID + " | Doubles: ");
+            foreach (double d in Doubles)
+            {
+                sb.Append(d.ToString() + " ");
+            }
+
+            return sb.ToString();
         }
 
 
@@ -72,8 +79,6 @@ namespace ENetServer.NetObjects.DataObjects
         /// </summary>
         public static class Factory
         {
-            //TODO: IMPLEMENT FACTORY HERE AND CHECK PERFORMANCE
-
             /// <summary>
             /// Attemps to create and return a new TransformDataObject from default/raw data. User should
             ///  verify success immediately after calling this method.

@@ -1,4 +1,5 @@
 ﻿using ENet;
+using ENetServer.Network;
 using ENetServer.NetObjects.DataObjects;
 using System;
 using System.Collections.Concurrent;
@@ -16,196 +17,107 @@ namespace ENetServer.NetObjects
     /// </summary>
     internal class NetSendObject
     {
-        internal SendType SendType { get; private set; }
-        internal uint PeerID { get; private set; }
-        internal byte[]? Bytes { get; private set; }
+        internal SendType SendType { get; }
+        internal Connection Connection { get; }
+        internal byte[]? Bytes { get; }
 
-        private NetSendObject(SendType sendType, uint peerId, byte[]? bytes)
+        private NetSendObject(SendType sendType, Connection connection, byte[]? bytes)
         {
             SendType = sendType;
-            PeerID = peerId;
+            Connection = connection;
             Bytes = bytes;
-        }
-
-        private NetSendObject()
-        {
-            SendType = SendType.None;
-            PeerID = 0;
-            Bytes = null;
-        }
-
-        private NetSendObject Reconstruct(SendType sendType, uint peerId, byte[]? bytes)
-        {
-            SendType = sendType;
-            PeerID = peerId;
-            Bytes = bytes;
-            return this;
-        }
-
-        private NetSendObject Reset()
-        {
-            SendType = SendType.None;
-            PeerID = 0;
-            Bytes = null;
-            return this;
         }
 
 
 
         /// <summary>
         /// Factory responsible for creating NetSendObjects. Each creator method corresponds to
-        ///  one SendType. Utilizes thread-safe static object pool.
+        ///  one SendType.
         /// </summary>
         internal static class Factory
         {
-            #region Object Pool and Methods
-
-            private static readonly ConcurrentQueue<NetSendObject> pool = [];
-            private static int targetPoolSize = 0;
-
             /// <summary>
-            /// Sets the target object pool size. Completely empties and re-populates pool.
+            /// Creates and returns a new NetSendObject formatted for connecting to one remote
+            ///  host. Requires an IP address and a port number.
             /// </summary>
-            /// <param name="poolSize"> Target number of elements to hold in the pool. </param>
-            internal static void SetPoolSize(int poolSize)
+            /// <param name="connection"> Connection for remote host to connect to (only contains IP and port). </param>
+            /// <returns></returns>
+            public static NetSendObject CreateConnectOne(Connection connection)
             {
-                // Completely empty pool, then fill pool with poolSize empty objects and set variable.
-                pool.Clear();
-                for (int i = 0; i < poolSize; i++)
-                {
-                    pool.Enqueue(new NetSendObject());
-                }
-                targetPoolSize = poolSize;
+                return new NetSendObject(SendType.Connect_One, connection, null);
             }
 
             /// <summary>
-            /// Returns a NetSendObject to the static object pool. Should always be called after
-            ///  dequeuing and operating on a NetSendObject.
+            /// Creates and returns a new NetSendObject formatted for disconnecting one remote
+            ///  host. Requires only a valid Connection object.
             /// </summary>
-            /// <param name="netSendObject"> The NetSendObject to return to the pool. </param>
-            internal static void ReturnToPool(NetSendObject netSendObject)
-            {
-                // Return to pool ONLY IF current pool count is <= target pool size.
-                if (pool.Count <= targetPoolSize)
-                {
-                    pool.Enqueue(netSendObject.Reset());   // Reset object before returning to pool.
-                }
-            }
-
-            #endregion
-
-
-
-            /// <summary>
-            /// Creates and returns a new NetSendObject formatted for disconnecting one client.
-            ///  Requires only the ID of the peer to disconnect.
-            /// </summary>
-            /// <param name="peerId"> ID of peer to be disconnected. </param>
+            /// <param name="connection"> Connection for remote host to disconnect. </param>
             /// <returns> The newly created 'disconnect one' NetSendObject. </returns>
-            internal static NetSendObject CreateDisconnectOne(uint peerId)
+            public static NetSendObject CreateDisconnectOne(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netSendObject))
-                //{
-                //    return netSendObject.Reconstruct(SendType.Disconnect_One, peerId, null);
-                //}
-
-                // Else if no object is available, create new.
-                return new NetSendObject(SendType.Disconnect_One, peerId, null);
+                return new NetSendObject(SendType.Disconnect_One, connection, null);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject formatted for disconnecting all clients.
-            ///  Requires no parameters because it is a universal operation.
+            /// Creates and returns a new NetSendObject formatted for disconnecting all remote
+            ///  hosts. Requires no parameters because it is a universal operation.
             /// </summary>
+            /// <param name="connection"> Connection containing whether to send to client or server peers. </param>
             /// <returns> The newly created 'disconnect all' NetSendObject. </returns>
-            internal static NetSendObject CreateDisconnectAll()
+            public static NetSendObject CreateDisconnectAll(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netSendObject))
-                //{
-                //    return netSendObject.Reconstruct(SendType.Disconnect_All, 0, null);
-                //}
-
-                // Else if no object is available, create new.
-                return new NetSendObject(SendType.Disconnect_All, 0, null);
+                return new NetSendObject(SendType.Disconnect_All, connection, null);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject formatted for messaging one client. Requires
-            ///  both a peer ID and a valid non-null byte[] of serialized GameDataObject data.
+            /// Creates and returns a new NetSendObject formatted for messaging one remote host.
+            ///  Requires a valid non-null Connection and GameDataObject.
             /// </summary>
-            /// <param name="peerId"> ID of peer to send message to. </param>
+            /// <param name="connection"> Connection for remote host to message. </param>
             /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
             /// <returns> The newly created 'message one' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageOne(uint peerId, byte[] bytes)
+            public static NetSendObject CreateMessageOne(Connection connection, byte[] bytes)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netSendObject))
-                //{
-                //    return netSendObject.Reconstruct(SendType.Message_One, peerId, bytes);
-                //}
-
-                // Else if no object is available, create new.
-                return new NetSendObject(SendType.Message_One, peerId, bytes);
+                return new NetSendObject(SendType.Message_One, connection, bytes);
             }
 
 
             /// <summary>
-            /// Creates and returns a new NetSendObject formatted for messaging all clients.
-            ///  Requires only a valid non-null byte[] of serialized GameDataObject data.
+            /// Creates and returns a new NetSendObject formatted for messaging all remote
+            ///  hosts. Requires only a valid non-null GameDataObject.
             /// </summary>
+            /// <param name="connection"> Connection containing whether to send to client or server peers. </param>
             /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
             /// <returns> The newly created 'message all' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageAll(byte[] bytes)
+            public static NetSendObject CreateMessageAll(Connection connection, byte[] bytes)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netSendObject))
-                //{
-                //    return netSendObject.Reconstruct(SendType.Message_All, 0, bytes);
-                //}
-
-                // Else if no object is available, create new.
-                return new NetSendObject(SendType.Message_All, 0, bytes);
+                return new NetSendObject(SendType.Message_All, connection, bytes);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject formatted for messaging all clients except
-            ///  one. Requires both a peer ID and a valid non-null byte[] of serialized GameDataObject data.
+            /// Creates and returns a new NetSendObject formatted for message all remote hosts
+            ///  except one. Requires a valid non-null Connection and GameDataObject.
             /// </summary>
-            /// <param name="peerId"> ID of peer to except sending this message to. </param>
-            /// <param name="gameDataObject"> byte[] of serialized GameDataObject data. Must not be null. </param>
+            /// <param name="connection"> Connection for remote host to ignore. </param>
+            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
             /// <returns> The newly created 'message all except' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageAllExcept(uint peerId, byte[] bytes)
+            public static NetSendObject CreateMessageAllExcept(Connection connection, byte[] bytes)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netSendObject))
-                //{
-                //    return netSendObject.Reconstruct(SendType.Message_AllExcept, peerId, bytes);
-                //}
-
-                // Else if no object is available, create new.
-                return new NetSendObject(SendType.Message_AllExcept, peerId, bytes);
+                return new NetSendObject(SendType.Message_AllExcept, connection, bytes);
             }
 
             /// <summary>
             /// Creates and returns a new TEST NetSendObject, which is not sent over the network but
             ///  instead is re-queued by the network thread.
             /// </summary>
-            /// <param name="peerId"> TEST peer ID to simulate message send overhead. </param>
+            /// <param name="connection"> TEST Connection object to simulate message send overhead. </param>
             /// <param name="bytes"> TEST byte[] to simulate message send overhead. </param>
             /// <returns> The newly created TEST NetSendObject. </returns>
-            internal static NetSendObject CreateTestSend(uint peerId, byte[] bytes)
+            public static NetSendObject CreateTestSend(Connection connection, byte[] bytes)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netSendObject))
-                //{
-                //    return netSendObject.Reconstruct(SendType.TestSend, peerId, bytes);
-                //}
-
-                // Else if no object is available, create new.
-                return new NetSendObject(SendType.TestSend, peerId, bytes);
+                return new NetSendObject(SendType.TestSend, connection, bytes);
             }
+
         }
     }
 }

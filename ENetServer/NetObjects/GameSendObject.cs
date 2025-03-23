@@ -1,5 +1,5 @@
 ﻿using ENet;
-using ENetServer.Management;
+using ENetServer.Network;
 using ENetServer.NetObjects.DataObjects;
 using System;
 using System.Collections.Concurrent;
@@ -17,195 +17,105 @@ namespace ENetServer.NetObjects
     /// </summary>
     public class GameSendObject
     {
-        public SendType SendType { get; private set; }
-        public uint PeerID { get; private set; }
-        public GameDataObject? GameDataObject { get; private set; }
+        public SendType SendType { get; }
+        public Connection Connection { get; }
+        public GameDataObject? GameDataObject { get; }
 
-        private GameSendObject(SendType sendType, uint peerId, GameDataObject? gameDataObject)
+        private GameSendObject(SendType sendType, Connection connection, GameDataObject? gameDataObject)
         {
             SendType = sendType;
-            PeerID = peerId;
+            Connection = connection;
             GameDataObject = gameDataObject;
-        }
-
-        private GameSendObject()
-        {
-            SendType = SendType.None;
-            PeerID = 0;
-            GameDataObject = null;
-        }
-
-        private GameSendObject Reconstruct(SendType sendType, uint peerId, GameDataObject? gameDataObject)
-        {
-            SendType = sendType;
-            PeerID = peerId;
-            GameDataObject = gameDataObject;
-            return this;
-        }
-
-        private GameSendObject Reset()
-        {
-            SendType = SendType.None;
-            PeerID = 0;
-            GameDataObject = null;
-            return this;
         }
 
 
 
         /// <summary>
         /// Factory responsible for creating GameSendObjects. Each creator method corresponds to
-        ///  one SendType. Utilizes thread-safe static object pool.
+        ///  one SendType.
         /// </summary>
         public static class Factory
         {
-            #region Object Pool and Methods
-
-            private static readonly ConcurrentQueue<GameSendObject> pool = [];
-            private static int targetPoolSize = 0;
-
             /// <summary>
-            /// Sets the target object pool size. Completely empties and re-populates pool.
+            /// Creates and returns a new GameSendObject formatted for connecting to one remote
+            ///  host. Requires an IP address and a port number.
             /// </summary>
-            /// <param name="poolSize"> Target number of elements to hold in the pool. </param>
-            internal static void SetPoolSize(int poolSize)
+            /// <param name="connection"> Connection containing data for peer to connect to. </param>
+            /// <returns></returns>
+            public static GameSendObject CreateConnectOne(Connection connection)
             {
-                // Completely empty pool, then fill pool with poolSize empty objects and set variable.
-                pool.Clear();
-                for (int i = 0; i < poolSize; i++)
-                {
-                    pool.Enqueue(new GameSendObject());
-                }
-                targetPoolSize = poolSize;
+                return new GameSendObject(SendType.Connect_One, connection, null);
             }
 
             /// <summary>
-            /// Returns a GameSendObject to the static object pool. Should always be called after
-            ///  dequeuing and operating on a GameSendObject.
+            /// Creates and returns a new GameSendObject formatted for disconnecting one remote
+            ///  host. Requires only a valid Connection object.
             /// </summary>
-            /// <param name="gameSendObject"> The GameSendObject to return to the pool. </param>
-            internal static void ReturnToPool(GameSendObject gameSendObject)
-            {
-                // Return to pool ONLY IF current pool count is <= target pool size.
-                if (pool.Count <= targetPoolSize)
-                {
-                    pool.Enqueue(gameSendObject.Reset());   // Reset object before returning to pool.
-                }
-            }
-
-            #endregion
-
-
-
-            /// <summary>
-            /// Creates and returns a new GameSendObject formatted for disconnecting one client.
-            ///  Requires only the ID of the peer to disconnect.
-            /// </summary>
-            /// <param name="peerId"> ID of peer to be disconnected. </param>
+            /// <param name="connection"> Connection for remote host to disconnect. </param>
             /// <returns> The newly created 'disconnect one' GameSendObject. </returns>
-            public static GameSendObject CreateDisconnectOne(uint peerId)
+            public static GameSendObject CreateDisconnectOne(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var gameSendObject))
-                //{
-                //    return gameSendObject.Reconstruct(SendType.Disconnect_One, peerId, null);
-                //}
-
-                // Else if no object is available, create new.
-                return new GameSendObject(SendType.Disconnect_One, peerId, null);
+                return new GameSendObject(SendType.Disconnect_One, connection, null);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for disconnecting all clients.
-            ///  Requires no parameters because it is a universal operation.
+            /// Creates and returns a new GameSendObject formatted for disconnecting all remote
+            ///  hosts. Requires no parameters because it is a universal operation.
             /// </summary>
+            /// <param name="connection"> Connection containing only whether to disconnect server or client peers. </param>
             /// <returns> The newly created 'disconnect all' GameSendObject. </returns>
-            public static GameSendObject CreateDisconnectAll()
+            public static GameSendObject CreateDisconnectAll(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var gameSendObject))
-                //{
-                //    return gameSendObject.Reconstruct(SendType.Disconnect_All, 0, null);
-                //}
-
-                // Else if no object is available, create new.
-                return new GameSendObject(SendType.Disconnect_All, 0, null);
+                return new GameSendObject(SendType.Disconnect_All, connection, null);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for messaging one client. Requires
-            ///  both the ID of the peer to message and a valid non-null GameDataObject.
+            /// Creates and returns a new GameSendObject formatted for messaging one remote host.
+            ///  Requires a valid non-null Connection and GameDataObject.
             /// </summary>
-            /// <param name="peerId"> ID of peer to send message to. </param>
+            /// <param name="connection"> Connection for remote host to message. </param>
             /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
             /// <returns> The newly created 'message one' GameSendObject. </returns>
-            public static GameSendObject CreateMessageOne(uint peerId, GameDataObject gameDataObject)
+            public static GameSendObject CreateMessageOne(Connection connection, GameDataObject gameDataObject)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var gameSendObject))
-                //{
-                //    return gameSendObject.Reconstruct(SendType.Message_One, peerId, gameDataObject);
-                //}
-
-                // Else if no object is available, create new.
-                return new GameSendObject(SendType.Message_One, peerId, gameDataObject);
+                return new GameSendObject(SendType.Message_One, connection, gameDataObject);
             }
 
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for messaging all clients.
-            ///  Requires only a valid non-null GameDataObject.
+            /// Creates and returns a new GameSendObject formatted for messaging all remote
+            ///  hosts. Requires only a valid non-null GameDataObject.
             /// </summary>
+            /// <param name="connection"> Connection containing only whether to disconnect server or client peers. </param>
             /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
             /// <returns> The newly created 'message all' GameSendObject. </returns>
-            public static GameSendObject CreateMessageAll(GameDataObject gameDataObject)
+            public static GameSendObject CreateMessageAll(Connection connection, GameDataObject gameDataObject)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var gameSendObject))
-                //{
-                //    return gameSendObject.Reconstruct(SendType.Message_All, 0, gameDataObject);
-                //}
-
-                // Else if no object is available, create new.
-                return new GameSendObject(SendType.Message_All, 0, gameDataObject);
+                return new GameSendObject(SendType.Message_All, connection, gameDataObject);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for message all clients except
-            ///  one. Requires both the ID of the peer NOT to message and a valid non-null GameDataObject.
+            /// Creates and returns a new GameSendObject formatted for message all remote hosts
+            ///  except one. Requires a valid non-null Connection and GameDataObject.
             /// </summary>
-            /// <param name="peerId"> ID of peer to except sending this message to. </param>
+            /// <param name="connection"> Connection for remote host to ignore. </param>
             /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
             /// <returns> The newly created 'message all except' GameSendObject. </returns>
-            public static GameSendObject CreateMessageAllExcept(uint peerId, GameDataObject gameDataObject)
+            public static GameSendObject CreateMessageAllExcept(Connection connection, GameDataObject gameDataObject)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var gameSendObject))
-                //{
-                //    return gameSendObject.Reconstruct(SendType.Message_AllExcept, peerId, gameDataObject);
-                //}
-
-                // Else if no object is available, create new.
-                return new GameSendObject(SendType.Message_AllExcept, peerId, gameDataObject);
+                return new GameSendObject(SendType.Message_AllExcept, connection, gameDataObject);
             }
 
             /// <summary>
             /// Creates and returns a new TEST GameSendObject, which is not sent over the network but
             ///  instead is re-queued by the network thread.
             /// </summary>
-            /// <param name="peerId"> TEST peer ID to simulate message send overhead. </param>
+            /// <param name="connection"> TEST Connection object to simulate message send overhead. </param>
             /// <param name="gameDataObject"> TEST GameDataObject to simulate message send overhead. </param>
             /// <returns> The newly created TEST GameSendObject. </returns>
-            public static GameSendObject CreateTestSend(uint peerId, GameDataObject gameDataObject)
+            public static GameSendObject CreateTestSend(Connection connection, GameDataObject gameDataObject)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var gameSendObject))
-                //{
-                //    return gameSendObject.Reconstruct(SendType.TestSend, peerId, gameDataObject);
-                //}
-
-                // Else if no object is available, create new.
-                return new GameSendObject(SendType.TestSend, peerId, gameDataObject);
+                return new GameSendObject(SendType.TestSend, connection, gameDataObject);
             }
 
         }

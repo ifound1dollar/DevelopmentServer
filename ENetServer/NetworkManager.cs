@@ -1,9 +1,8 @@
 ﻿using ENet;
 using ENetServer.NetObjects;
-using ENetServer.Management;
+using ENetServer.Network;
 using ENetServer.Serialize;
 using System.Collections.Concurrent;
-using ENetServer.Network;
 using System.ComponentModel;
 
 namespace ENetServer
@@ -64,8 +63,10 @@ namespace ENetServer
         private ConcurrentQueue<NetSendObject> NetSendQueue { get; } = new();
         private ConcurrentQueue<NetRecvObject> NetRecvQueue { get; } = new();
 
-        // Publicly accessible because users may need to know.
+        // Publicly accessible, these are readonly (in practice) so thread-safe.
         public bool IsServer { get; private set; }
+        public ushort ServerPortMin { get; } = 7777;
+        public ushort ClientPortMin { get; } = 8888;
 
         // These are nullable so they can be manually initialized in Setup().
         private SerializeWorker? serializeWorker;
@@ -79,7 +80,7 @@ namespace ENetServer
         /// <summary>
         /// Sets up NetworkManager as server, initializing and configuring thread workers.
         /// </summary>
-        public void SetupAsServer()
+        public void SetupAsServer(ushort port = 7777)
         {
             // Throw exception if NetworkManager has already been initialized.
             if (state != State.Uninitialized)
@@ -90,21 +91,15 @@ namespace ENetServer
 
             IsServer = true;
             serializeWorker = new SerializeWorker();
-            serverWorker = new ServerWorker();
-
-            // Initialize NetObject object pools to decently-large size for server.
-            //GameSendObject.Factory.SetPoolSize(100);
-            //GameRecvObject.Factory.SetPoolSize(100);
-            //NetSendObject.Factory.SetPoolSize(100);
-            //NetRecvObject.Factory.SetPoolSize(100);
+            serverWorker = new ServerWorker(port);
 
             state = State.Initialized;
         }
 
         /// <summary>
-        /// Sets up NetworkManager as server, initializing and configuring thread workers.
+        /// Sets up NetworkManager as client, initializing and configuring thread workers.
         /// </summary>
-        public void SetupAsClient()
+        public void SetupAsClient(ushort port = 8888)
         {
             // Throw exception if NetworkManager has already been initialized.
             if (state != State.Uninitialized)
@@ -115,13 +110,7 @@ namespace ENetServer
 
             IsServer = false;
             serializeWorker = new SerializeWorker();
-            clientWorker = new ClientWorker();
-
-            // Initialize NetObject object pools to smaller size for client.
-            //GameSendObject.Factory.SetPoolSize(100);
-            //GameRecvObject.Factory.SetPoolSize(100);
-            //NetSendObject.Factory.SetPoolSize(100);
-            //NetRecvObject.Factory.SetPoolSize(100);
+            clientWorker = new ClientWorker(port);
 
             state = State.Initialized;
         }
@@ -150,7 +139,7 @@ namespace ENetServer
             }
             else
             {
-                serverWorker?.StartThread();
+                serializeWorker?.StartThread();
                 clientWorker?.StartThread();
             }
 
@@ -177,7 +166,7 @@ namespace ENetServer
             else
             {
                 clientWorker?.StopThread();
-                serverWorker?.StopThread();
+                serializeWorker?.StopThread();
             }
 
             // NOTE: NetworkWorker should be stopped first because disconnecting clients will enqueue
@@ -297,14 +286,14 @@ namespace ENetServer
             private readonly Server server;
             private volatile bool shouldExit = false;
 
-            internal ServerWorker()
+            internal ServerWorker(ushort port)
             {
                 // Thread will call the Run() method.
                 thread = new(Run);
 
                 // INITIALIZE ENET SERVER, BUT DO NOT CREATE SERVER YET.
                 server = new Server(Instance.NetSendQueue, Instance.NetRecvQueue);
-                server.SetHostParameters(); // SET HOST PARAMETERS HERE (HAVE DEFAULT VALUES)
+                server.SetHostParameters(port: port);   // SET HOST PARAMETERS HERE (HAVE DEFAULT VALUES)
             }
 
 
@@ -364,14 +353,14 @@ namespace ENetServer
             private readonly Client client;
             private volatile bool shouldExit = false;
 
-            internal ClientWorker()
+            internal ClientWorker(ushort port)
             {
                 // Thread will call the Run() method.
                 thread = new(Run);
 
                 // INITIALIZE ENET CLIENT, BUT DO NOT CREATE HOST YET.
-                client = new Client();              //TODO: implement w/arguments
-                client.SetRemoteHostParameters();   //TODO: implement w/arguments
+                client = new Client(Instance.NetSendQueue, Instance.NetRecvQueue);
+                client.SetHostParameters(port: port);
             }
 
 
@@ -382,8 +371,8 @@ namespace ENetServer
             internal void StartThread()
             {
                 thread.Start();
-                Console.WriteLine("[STARTUP] Client host attempting to connect to {0}:{1}",
-                    client.GetRemoteAddress().GetIP(), client.GetRemoteAddress().Port);
+                Console.WriteLine("[STARTUP] Client host started listening on {0}:{1}",
+                    client.GetAddress().GetIP(), client.GetAddress().Port);
             }
 
             /// <summary>

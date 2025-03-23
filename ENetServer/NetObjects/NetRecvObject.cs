@@ -1,4 +1,4 @@
-﻿using ENetServer.Management;
+﻿using ENetServer.Network;
 using ENetServer.NetObjects.DataObjects;
 using System;
 using System.Collections.Concurrent;
@@ -16,9 +16,6 @@ namespace ENetServer.NetObjects
     /// </summary>
     internal class NetRecvObject
     {
-        // Empty Connection object used for un-constructed object.
-        private static readonly Connection emptyConnection = new(0, "0.0.0.0", 0);
-
         internal RecvType RecvType { get; private set; }
         internal Connection Connection { get; private set; }
         internal byte[]? Bytes { get; private set; }
@@ -30,75 +27,14 @@ namespace ENetServer.NetObjects
             Bytes = bytes;
         }
 
-        private NetRecvObject()
-        {
-            RecvType = RecvType.None;
-            Connection = emptyConnection;
-            Bytes = null;
-        }
-
-        private NetRecvObject Reconstruct(RecvType recvType, Connection connection, byte[]? bytes)
-        {
-            RecvType = recvType;
-            Connection = connection;
-            Bytes = bytes;
-            return this;
-        }
-
-        private NetRecvObject Reset()
-        {
-            RecvType = RecvType.None;
-            Connection = emptyConnection;
-            Bytes = null;
-            return this;
-        }
-
 
 
         /// <summary>
         /// Factory responsible for creating NetworkRecvObjects. Each creator method corresponds to
-        ///  one RecvType. Utilizes thread-safe static object pool.
+        ///  one RecvType.
         /// </summary>
         internal static class Factory
         {
-            #region Object Pool and Methods
-
-            private static readonly ConcurrentQueue<NetRecvObject> pool = [];
-            private static int targetPoolSize = 0;
-
-            /// <summary>
-            /// Sets the target object pool size. Completely empties and re-populates pool.
-            /// </summary>
-            /// <param name="poolSize"> Target number of elements to hold in the pool. </param>
-            internal static void SetPoolSize(int poolSize)
-            {
-                // Completely empty pool, then fill pool with poolSize empty objects and set variable.
-                pool.Clear();
-                for (int i = 0; i < poolSize; i++)
-                {
-                    pool.Enqueue(new NetRecvObject());
-                }
-                targetPoolSize = poolSize;
-            }
-
-            /// <summary>
-            /// Returns a NetRecvObject to the static object pool. Should always be called after
-            ///  dequeuing and operating on a NetRecvObject.
-            /// </summary>
-            /// <param name="netRecvObject"> The NetRecvObject to return to the pool. </param>
-            internal static void ReturnToPool(NetRecvObject netRecvObject)
-            {
-                // Return to pool ONLY IF current pool count is <= target pool size.
-                if (pool.Count <= targetPoolSize)
-                {
-                    pool.Enqueue(netRecvObject.Reset());   // Reset object before returning to pool.
-                }
-            }
-
-            #endregion
-
-
-
             /// <summary>
             /// Creates and returns a new NetworkRecvObject from a 'connect' ENet event. Requires only
             ///  peer information (no byte[] payload).

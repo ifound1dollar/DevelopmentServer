@@ -1,4 +1,4 @@
-﻿using ENetServer.Management;
+﻿using ENetServer.Network;
 using ENetServer.NetObjects;
 using System;
 using System.Collections.Generic;
@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static ENetServer.NetStatics;
+using System.Collections.Concurrent;
 
 namespace ENetServer
 {
@@ -15,6 +16,11 @@ namespace ENetServer
         private readonly Thread thread;
         private volatile bool shouldExit = false;
         private volatile bool isPaused = false;
+
+        /// <summary>
+        /// Map containing references to all Connections (both client and server) in format ID:Connection.
+        /// </summary>
+        public ConcurrentDictionary<uint, Connection> Connections { get; } = new();
 
         public GameSimulatorWorker()
         {
@@ -26,26 +32,16 @@ namespace ENetServer
         /// <summary>
         /// Starts the worker thread, beginning server operations on a separate thread.
         /// </summary>
-        internal void StartThread()
+        public void StartThread()
         {
             thread.Start();
             Console.WriteLine("[STARTUP] GameSimulator thread started.");
         }
 
-        internal void PauseThread()
-        {
-            isPaused = true;
-        }
-
-        internal void ResumeThread()
-        {
-            isPaused = false;
-        }
-
         /// <summary>
         /// Stops the worker thread, waiting for server to shut down before joining and returning.
         /// </summary>
-        internal void StopThread()
+        public void StopThread()
         {
             // Sets shouldExit to true, which will gracefully exit the threaded loop.
             shouldExit = true;
@@ -55,6 +51,23 @@ namespace ENetServer
             thread.Join();
             Console.WriteLine("[EXIT] GameSimulator stopped successfully.");
         }
+
+        /// <summary>
+        /// Sets a volatile boolean that will pause threaded Tick operations until resumed.
+        /// </summary>
+        public void PauseThread()
+        {
+            isPaused = true;
+        }
+
+        /// <summary>
+        /// Sets a volatile boolean that will resume threaded Tick operations if paused.
+        /// </summary>
+        public void ResumeThread()
+        {
+            isPaused = false;
+        }
+
 
         private void DoFixedIntervalTick()
         {
@@ -103,10 +116,9 @@ namespace ENetServer
             // Dequeue and get all GameRecvObjects in the queue at the start of the tick.
             GameRecvObject?[] gameRecvObjects = NetworkManager.Instance.DequeueAllGameRecvObjects();
 
-            // Actually handle each dequeued GameRecvObject.
+            // Actually handle each dequeued GameRecvObject, skipping if null.
             foreach (var gameRecvObject in gameRecvObjects)
             {
-                // Skip if null (should never be).
                 if (gameRecvObject == null) continue;
 
                 // Operate based on receive type.
@@ -114,36 +126,123 @@ namespace ENetServer
                 {
                     case RecvType.Connect:
                         {
-                            Console.WriteLine("[CONNECT] Client connected - ID: " + gameRecvObject.Connection.ID +
-                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
+                            HandleConnect(gameRecvObject);
                             break;
                         }
                     case RecvType.Disconnect:
                         {
-                            Console.WriteLine("[DISCONNECT] Client disconnected - ID: " + gameRecvObject.Connection.ID +
-                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
+                            HandleDisconnect(gameRecvObject);
                             break;
                         }
                     case RecvType.Timeout:
                         {
-                            Console.WriteLine("[TIMEOUT] Client timed out - ID: " + gameRecvObject.Connection.ID +
-                                ", Address: " + gameRecvObject.Connection.IP + ":" + gameRecvObject.Connection.Port);
+                            HandleTimeout(gameRecvObject);
                             break;
                         }
                     case RecvType.Message:
                         {
-                            Console.WriteLine("[MESSAGE] Packet received from - ID: " + gameRecvObject.Connection.ID +
-                                ", Message: " + gameRecvObject.GameDataObject?.GetDescription());
+                            HandleMessage(gameRecvObject);
                             break;
                         }
-                    case RecvType.TestRecv:
+                    case RecvType.TestRecv: // THIS CASE SHOULD NEVER BE REACHED, GAMESIMULATOR SHOULD BE PAUSED DURING TEST
                         {
                             Console.WriteLine("[TEST] TestRecv object received successfully.");
                             break;
                         }
                     // DO NOTHING WITH DEFAULT CASE
                 }
+
+                /* - outside of switch case, inside foreach loop - */
             }
         }
+
+
+
+        #region Receive Handlers
+
+        private void HandleConnect(GameRecvObject gameRecvObject)
+        {
+            // Different message handling based on client or server.
+            if (NetworkManager.Instance.IsServer)
+            {
+                string temp = (gameRecvObject.Connection.IsServer) ? "Server" : "Client";
+                Console.WriteLine("[CONNECT] {0} connected (ID: {1}), Address: {2}:{3}",
+                    temp, gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+            }
+            else
+            {
+                Console.WriteLine("[CONNECT] Successfully connected to server (ID: {0}), Address {1}:{2}",
+                    gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+            }
+
+            // Try to add new Connection to map.
+            Connections.TryAdd(gameRecvObject.Connection.ID, gameRecvObject.Connection);
+        }
+
+        private void HandleDisconnect(GameRecvObject gameRecvObject)
+        {
+            // Different message handling based on client or server.
+            if (NetworkManager.Instance.IsServer)
+            {
+                string temp = (gameRecvObject.Connection.IsServer) ? "Server" : "Client";
+                Console.WriteLine("[DISCONNECT] {0} disconnected (ID: {1}), Address: {2}:{3}",
+                    temp, gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+            }
+            else
+            {
+                Console.WriteLine("[DISCONNECT] Disconnected from server (ID: {0}), Address {1}:{2}",
+                    gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+            }
+
+            // Remove now-disconnected Connection from map.
+            Connections.Remove(gameRecvObject.Connection.ID, out _);
+        }
+
+        private void HandleTimeout(GameRecvObject gameRecvObject)
+        {
+            // Different message handling based on client or server.
+            if (NetworkManager.Instance.IsServer)
+            {
+                string temp = (gameRecvObject.Connection.IsServer) ? "Server" : "Client";
+                Console.WriteLine("[TIMEOUT] {0} timed out (ID: {1}), Address: {2}:{3}",
+                    temp, gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+            }
+            else
+            {
+                Console.WriteLine("[TIMEOUT] Timed out from server (ID: {0}), Address {1}:{2}",
+                    gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+            }
+
+            // Remove now-disconnected Connection from map.
+            Connections.Remove(gameRecvObject.Connection.ID, out _);
+        }
+
+        private void HandleMessage(GameRecvObject gameRecvObject)
+        {
+            // Different message handling based on client or server.
+            if (NetworkManager.Instance.IsServer)
+            {
+                string temp = (gameRecvObject.Connection.IsServer) ? "server" : "client";
+                Console.WriteLine("[MESSAGE] Message received from {0} (ID: {1}), Address: {2}:{3} Message: {4}",
+                    temp, gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port,
+                    gameRecvObject.GameDataObject?.GetDescription());
+            }
+            else
+            {
+                Console.WriteLine("[MESSAGE] Message received from server (ID: {0}), Address: {1}:{2} Message: {3}",
+                    gameRecvObject.Connection.ID,
+                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port,
+                    gameRecvObject.GameDataObject?.GetDescription());
+            }
+        }
+
+        #endregion
     }
 }

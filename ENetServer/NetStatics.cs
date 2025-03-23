@@ -11,7 +11,8 @@ namespace ENetServer
     /// </summary>
     public static class NetStatics
     {
-        public enum SendType { None, Disconnect_One, Disconnect_All, Message_One, Message_All, Message_AllExcept, TestSend }
+        public enum SendType { None, Connect_One, Disconnect_One, Disconnect_All,
+            Message_One, Message_All, Message_AllExcept, TestSend }
         public enum RecvType { None, Connect, Disconnect, Timeout, Message, TestRecv }
 
 

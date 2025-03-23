@@ -30,7 +30,7 @@ namespace ENetServer.NetObjects.DataObjects
 
         public override string GetDescription()
         {
-            return "TextDataObject contents: " + String;
+            return "[TextDataObject] String: " + String;
         }
 
 
