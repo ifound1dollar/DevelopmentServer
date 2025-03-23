@@ -71,6 +71,10 @@ namespace ClientExample
                     {
                         ClientDisconnectFromAll();
                     }
+                    else if (inputLower == "test")
+                    {
+                        ClientToggleGameSimulatorTest();
+                    }
                     else if (inputSplit.Length > 0 && inputSplit[0] == "dc")
                     {
                         if (inputSplit.Length < 2) continue;
@@ -232,5 +236,22 @@ namespace ClientExample
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
+        /// <summary>
+        /// Toggles testing mode for the GameSimulator, which sends an object over the network
+        ///  once per tick.
+        /// </summary>
+        public static void ClientToggleGameSimulatorTest()
+        {
+            if (!GameSimulator.GetIsTesting())
+            {
+                Console.WriteLine("[ACTION] Toggling on GameSimulator test mode - receive logging disabled while active.");
+                GameSimulator.StartTesting();
+            }
+            else
+            {
+                Console.WriteLine("[ACTION] Toggling off GameSimulator test mode.");
+                GameSimulator.StopTesting();
+            }
+        }
     }
 }

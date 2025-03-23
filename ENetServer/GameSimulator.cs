@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static ENetServer.NetStatics;
 using System.Collections.Concurrent;
+using ENetServer.NetObjects.DataObjects;
 
 namespace ENetServer
 {
@@ -16,6 +17,7 @@ namespace ENetServer
         private readonly Thread thread;
         private volatile bool shouldExit = false;
         private volatile bool isPaused = false;
+        private volatile bool isTesting = false;
 
         /// <summary>
         /// Map containing references to all Connections (both client and server) in format ID:Connection.
@@ -68,13 +70,32 @@ namespace ENetServer
             isPaused = false;
         }
 
+        public void StartTesting()
+        {
+            isTesting = true;
+        }
+
+        public void StopTesting()
+        {
+            isTesting = false;
+        }
+
+        public bool GetIsTesting()
+        {
+            return isTesting;
+        }
+
 
         private void DoFixedIntervalTick()
         {
-            double tickIntervalExact = 1000.0d / 30.0d;     // 30 per second (33.3ms/tick)
+            double tickIntervalExact = 1000.0d / 100.0d;     // 30 per second (33.3ms/tick)
             int tickInterval = (int)Math.Round(tickIntervalExact);
             int sleepTime;
             Stopwatch stopwatch = new();
+
+            //TEMP
+            long counter = 0;
+            //TEMP
 
             // Will continue looping until 'shouldExit' is set to true, which should be done via SetShouldExit().
             while (!shouldExit)
@@ -83,7 +104,10 @@ namespace ENetServer
 
                 // Restart timer and actually perform tick operations.
                 stopwatch.Restart();
-                TickService();
+
+                TickSend(counter++);
+
+                TickReceive();
 
 
 
@@ -111,10 +135,28 @@ namespace ENetServer
             }
         }
 
-        private void TickService()
+        private void TickSend(long counter)
+        {
+            // Do nothing while not testing (TEMP).
+            if (!isTesting) return;
+
+            GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(counter.ToString());
+            if (gameDataObject == null) return;
+
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(new Connection(true), gameDataObject);
+            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+        }
+
+        private void TickReceive()
         {
             // Dequeue and get all GameRecvObjects in the queue at the start of the tick.
             GameRecvObject?[] gameRecvObjects = NetworkManager.Instance.DequeueAllGameRecvObjects();
+
+            // Do not print output while testing.
+            if (isTesting)
+            {
+                return;
+            }
 
             // Actually handle each dequeued GameRecvObject, skipping if null.
             foreach (var gameRecvObject in gameRecvObjects)

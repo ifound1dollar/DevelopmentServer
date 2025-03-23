@@ -74,6 +74,10 @@ namespace ServerExample
                     {
                         ServerSendTransformToAll(uint.MaxValue, -6546515611561564564, 2, 3);
                     }
+                    else if (inputLower == "gc")
+                    {
+                        ForceGarbageCollection();
+                    }
                     else if (inputSplit.Length > 0 && inputSplit[0] == "stress")
                     {
                         if (inputSplit.Length < 2) continue;
@@ -123,8 +127,8 @@ namespace ServerExample
                 // Log de-initialization.
                 Console.WriteLine("[EXIT] De-initialized ENet library.");
 
-                Console.Write("\nPress any key to close console...");
-                Console.ReadKey();
+                //Console.Write("\nPress any key to close console...");
+                //Console.ReadKey();
             }
         }
 
@@ -289,6 +293,19 @@ namespace ServerExample
             Console.WriteLine("[LOG] Average per second: {0:n0}",
                 numObjects / (sw.ElapsedMilliseconds / 1000.0f));
             sw.Reset();
+        }
+
+        /// <summary>
+        /// Forces the Garbage Collector to collect ASAP.
+        /// </summary>
+        public static void ForceGarbageCollection()
+        {
+            Console.WriteLine("[ACTION] Running garbage collection.");
+
+            // Set LOH compact mode which will compact it on next GC. Is reset to Default on collection.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode =
+                            System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            System.GC.Collect();
         }
     }
 }

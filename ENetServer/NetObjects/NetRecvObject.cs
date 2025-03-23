@@ -43,13 +43,6 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'connect' NetworkRecvObject. </returns>
             internal static NetRecvObject CreateFromConnect(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netRecvObject))
-                //{
-                //    return netRecvObject.Reconstruct(RecvType.Connect, connection, null);
-                //}
-
-                // Else if no object is available, create new.
                 return new NetRecvObject(RecvType.Connect, connection, null);
             }
 
@@ -61,13 +54,6 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'disconnect' NetworkRecvObject. </returns>
             internal static NetRecvObject CreateFromDisconnect(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netRecvObject))
-                //{
-                //    return netRecvObject.Reconstruct(RecvType.Disconnect, connection, null);
-                //}
-
-                // Else if no object is available, create new.
                 return new NetRecvObject(RecvType.Disconnect, connection, null);
             }
 
@@ -79,13 +65,6 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'timeout' NetworkRecvObject. </returns>
             internal static NetRecvObject CreateFromTimeout(Connection connection)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netRecvObject))
-                //{
-                //    return netRecvObject.Reconstruct(RecvType.Timeout, connection, null);
-                //}
-
-                // Else if no object is available, create new.
                 return new NetRecvObject(RecvType.Timeout, connection, null);
             }
 
@@ -98,13 +77,6 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'message' NetworkRecvObject. </returns>
             internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netRecvObject))
-                //{
-                //    return netRecvObject.Reconstruct(RecvType.Message, connection, bytes);
-                //}
-
-                // Else if no object is available, create new.
                 return new NetRecvObject(RecvType.Message, connection, bytes);
             }
 
@@ -117,13 +89,6 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created TEST GameRecvObject. </returns>
             internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes)
             {
-                // If successfully pulls from pool, re-initialize members and return the object.
-                //if (pool.TryDequeue(out var netRecvObject))
-                //{
-                //    return netRecvObject.Reconstruct(RecvType.TestRecv, connection, bytes);
-                //}
-
-                // Else if no object is available, create new.
                 return new NetRecvObject(RecvType.TestRecv, connection, bytes);
             }
         }
