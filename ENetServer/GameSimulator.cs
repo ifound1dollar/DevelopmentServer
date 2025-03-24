@@ -88,7 +88,7 @@ namespace ENetServer
 
         private void DoFixedIntervalTick()
         {
-            double tickIntervalExact = 1000.0d / 1.0d;     // 30 per second (33.3ms/tick)
+            double tickIntervalExact = 1000.0d / 10.0d;     // Second double is TPS (divide ms value)
             int tickInterval = (int)Math.Round(tickIntervalExact);
             int sleepTime;
             Stopwatch stopwatch = new();

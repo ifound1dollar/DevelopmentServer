@@ -17,6 +17,7 @@ namespace ENetServer.Network
         // HOST DATA
         private Host? clientHost;
         private Address address;
+        private int peerLimit;
         private int channelLimit;
 
         // QUEUE REFERENCES
@@ -59,12 +60,13 @@ namespace ENetServer.Network
         /// <param name="ip"> IP address of this host will run on (useless?). </param>
         /// <param name="port"> Port this host will run on. </param>
         /// <param name="channelLimit"> Maximum number of channels that can be used for communication with this host. </param>
-        internal void SetHostParameters(string ip = "127.0.0.1", ushort port = 8888, int channelLimit = 2)
+        internal void SetHostParameters(string ip = "127.0.0.1", ushort port = 8888, int peerLimit = 64, int channelLimit = 2)
         {
             address = new();
             address.SetIP(ip);
             address.Port = port;
 
+            this.peerLimit = peerLimit;
             this.channelLimit = channelLimit;
         }
 
@@ -73,9 +75,9 @@ namespace ENetServer.Network
         /// </summary>
         internal void Start()
         {
-            // Create the client host with address, 1 connection (server only), defined channel limit, no bandwidth limit.
+            // Create the client host with address, defined peer limit, defined channel limit, no bandwidth limit.
             clientHost = new();
-            clientHost.Create(address, 1, channelLimit, 0u, 0u, 1024*1024);
+            clientHost.Create(address, peerLimit, channelLimit, 0u, 0u, 1024*1024);
         }
 
         /// <summary>

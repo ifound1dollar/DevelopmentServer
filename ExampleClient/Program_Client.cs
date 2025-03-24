@@ -13,17 +13,24 @@ namespace ClientExample
 
         static void Main(string[] args)
         {
-            // Port argument parsing so multiple client/server instances can be run.
-            bool validPort = false;
-            ushort argPort = 0;
-            if (args.Length > 0)
-            {
-                validPort = ushort.TryParse(args[0], out argPort);
-            }
-
             // Wrap entire main function in try-catch-finally to ensure ENet is deinitialized at exit.
             try
             {
+                // FIRST, ask user for port.
+                Console.Write("Enter port number to run client host on (minimum {0}): ", NetworkManager.Instance.ClientPortMin);
+                string? userInput = Console.ReadLine();
+                bool validPort = false;
+                ushort argPort = NetworkManager.Instance.ClientPortMin;
+                if (userInput != null)
+                {
+                    validPort = ushort.TryParse(userInput, out argPort);
+                    if (argPort < NetworkManager.Instance.ClientPortMin)
+                    {
+                        Console.WriteLine("Port number out of range, defaulting to 8888.");
+                        argPort = NetworkManager.Instance.ClientPortMin;
+                    }
+                }
+
                 // Initialize ENet library.
                 if (ENet.Library.Initialize())
                 {
