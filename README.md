@@ -29,20 +29,20 @@ The below section contains various performance documentation from tests during d
 **Multi-threaded implementation *without* NetObject static object pools, 10,000,000 Text GameDataObjects:**
 
 Fully parallel operation (one enqueue and one dequeue attempt per while loop iteration):
-* Send operations completed after ~4000ms
-* Receive operations completed after ~7000ms
-* Average round-trip operations per second: ~1.4 million
+* Send operations completed after ~4500-5000ms
+* Receive operations completed after ~7500-8000ms
+* Average round-trip operations per second: ~1.25-1.3 million
 
 Parallel operation with explicit wait to dequeue (enqueue one then block until that item is dequeued, each iteration):
-* Send and receive operations (both enqueue and dequeue happening in same while loop iteration) completed after ~13500ms
+* Send and receive operations (both enqueue and dequeue happening in same while loop iteration) completed after ~14000ms
 * Average round-trip operations per second: ~700,000
 
 Linear operation (enqueue all objects, then dequeue all objects individually):
-* Send operations completed after ~4000ms
-* Receive operations completed after ~7500ms
-* Average round-trip operations per second: ~1.3 million
+* Send operations completed after ~4500ms
+* Receive operations completed after ~7500-8000ms
+* Average round-trip operations per second: ~1.25-1.3 million
 
-**Multi-threaded implementation *with* NetObject static object pools, 10,000,000 Text GameDataObjects:**
+**Multi-threaded implementation *with* NetObject static object pools, 10,000,000 Text GameDataObjects: (OLD BEFORE FULL SYSTEM FUNCTIONALITY)**
 
 Fully parallel operation:
 * Send operations completed after ~5500ms

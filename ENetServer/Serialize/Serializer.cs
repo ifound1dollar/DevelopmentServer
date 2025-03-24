@@ -61,6 +61,11 @@ namespace ENetServer.Serialize
                             SendDisconnectOne(gameSendObject);
                             break;
                         }
+                    case SendType.Disconnect_Many:
+                        {
+                            SendDisconnectMany(gameSendObject);
+                            break;
+                        }
                     case SendType.Disconnect_All:
                         {
                             SendDisconnectAll(gameSendObject);
@@ -69,6 +74,11 @@ namespace ENetServer.Serialize
                     case SendType.Message_One:
                         {
                             SendMessageOne(gameSendObject);
+                            break;
+                        }
+                    case SendType.Message_Many:
+                        {
+                            SendMessageMany(gameSendObject);
                             break;
                         }
                     case SendType.Message_All:
@@ -88,7 +98,7 @@ namespace ENetServer.Serialize
                             if (bytes != null)
                             {
                                 NetSendObject netSendObject = NetSendObject.Factory.CreateTestSend(
-                                    gameSendObject.Connection, bytes);
+                                    gameSendObject.PeerParams, bytes);
                                 netSendQueue.Enqueue(netSendObject);
                             }
                             
@@ -160,19 +170,25 @@ namespace ENetServer.Serialize
 
         private void SendConnectOne(GameSendObject gameObject)
         {
-            NetSendObject netSendObject = NetSendObject.Factory.CreateConnectOne(gameObject.Connection);
+            NetSendObject netSendObject = NetSendObject.Factory.CreateConnectOne(gameObject.PeerParams);
             netSendQueue.Enqueue(netSendObject);
         }
 
         private void SendDisconnectOne(GameSendObject gameObject)
         {
-            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectOne(gameObject.Connection);
+            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectOne(gameObject.PeerParams);
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        private void SendDisconnectMany(GameSendObject gameObject)
+        {
+            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectMany(gameObject.PeerParams);
             netSendQueue.Enqueue(dataObject);
         }
 
         private void SendDisconnectAll(GameSendObject gameObject)
         {
-            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectAll(gameObject.Connection);
+            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectAll(gameObject.PeerParams);
             netSendQueue.Enqueue(dataObject);
         }
 
@@ -186,7 +202,21 @@ namespace ENetServer.Serialize
                 return;
             }
 
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageOne(gameObject.Connection, bytes);
+            NetSendObject dataObject = NetSendObject.Factory.CreateMessageOne(gameObject.PeerParams, bytes);
+            netSendQueue.Enqueue(dataObject);
+        }
+
+        private void SendMessageMany(GameSendObject gameObject)
+        {
+            // Serialize GameOutObject data and return as byte[].
+            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
+            if (bytes == null)
+            {
+                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                return;
+            }
+
+            NetSendObject dataObject = NetSendObject.Factory.CreateMessageMany(gameObject.PeerParams, bytes);
             netSendQueue.Enqueue(dataObject);
         }
 
@@ -200,7 +230,7 @@ namespace ENetServer.Serialize
                 return;
             }
 
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageAll(gameObject.Connection, bytes);
+            NetSendObject dataObject = NetSendObject.Factory.CreateMessageAll(gameObject.PeerParams, bytes);
             netSendQueue.Enqueue(dataObject);
         }
 
@@ -214,7 +244,7 @@ namespace ENetServer.Serialize
                 return;
             }
 
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageAllExcept(gameObject.Connection, bytes);
+            NetSendObject dataObject = NetSendObject.Factory.CreateMessageAllExcept(gameObject.PeerParams, bytes);
             netSendQueue.Enqueue(dataObject);
         }
 

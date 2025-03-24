@@ -20,6 +20,13 @@ namespace ENetServer.NetObjects
         public Connection Connection { get; private set; }
         public GameDataObject? GameDataObject { get; private set; }
 
+        private GameRecvObject(RecvType recvType, Connection connection)
+        {
+            RecvType = recvType;
+            Connection = connection;
+            // GameDataObject remains null.
+        }
+
         private GameRecvObject(RecvType recvType, Connection connection, GameDataObject? gameDataObject)
         {
             RecvType = recvType;
@@ -35,6 +42,15 @@ namespace ENetServer.NetObjects
         /// </summary>
         internal static class Factory
         {
+            // NOTE: Each of the below Factory methods are almost identical (generally violating
+            //  the DRY principle) and could reasonably be consolidated into two methods: those
+            //  with payload data, and those without.
+            // However, using separate Factory methods for each RecvType enforces safe object
+            //  creation and guarantees that the receive event being handled will be accurately
+            //  represented within the NetObject. It eliminates the possibility of a mismatch
+            //  between the event type and the stored RecvType (ex. a Message receive event that
+            //  has a null payload reference).
+
             /// <summary>
             /// Creates and returns a new GameRecvObject from a 'connect' ENet event. Requires only
             ///  peer information, does not require a deserialized GameDataObject.
@@ -43,7 +59,7 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'connect' GameRecvObject. </returns>
             internal static GameRecvObject CreateFromConnect(Connection connection)
             {
-                return new GameRecvObject(RecvType.Connect, connection, null);
+                return new GameRecvObject(RecvType.Connect, connection);
             }
 
             /// <summary>
@@ -54,7 +70,7 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'disconnect' GameRecvObject. </returns>
             internal static GameRecvObject CreateFromDisconnect(Connection connection)
             {
-                return new GameRecvObject(RecvType.Disconnect, connection, null);
+                return new GameRecvObject(RecvType.Disconnect, connection);
             }
 
             /// <summary>
@@ -65,7 +81,7 @@ namespace ENetServer.NetObjects
             /// <returns> The newly created 'timeout' GameRecvObject. </returns>
             internal static GameRecvObject CreateFromTimeout(Connection connection)
             {
-                return new GameRecvObject(RecvType.Timeout, connection, null);
+                return new GameRecvObject(RecvType.Timeout, connection);
             }
 
             /// <summary>
@@ -79,6 +95,8 @@ namespace ENetServer.NetObjects
             {
                 return new GameRecvObject(RecvType.Message, connection, gameDataObject);
             }
+
+
 
             /// <summary>
             /// Creates and returns a new TEST GameRecvObject, which was not actually received over the

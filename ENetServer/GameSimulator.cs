@@ -88,7 +88,7 @@ namespace ENetServer
 
         private void DoFixedIntervalTick()
         {
-            double tickIntervalExact = 1000.0d / 100.0d;     // 30 per second (33.3ms/tick)
+            double tickIntervalExact = 1000.0d / 1.0d;     // 30 per second (33.3ms/tick)
             int tickInterval = (int)Math.Round(tickIntervalExact);
             int sleepTime;
             Stopwatch stopwatch = new();
@@ -143,7 +143,8 @@ namespace ENetServer
             GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(counter.ToString());
             if (gameDataObject == null) return;
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(new Connection(true), gameDataObject);
+            // Send to server with ID 0.
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(0u, gameDataObject);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 

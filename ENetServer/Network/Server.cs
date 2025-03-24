@@ -153,6 +153,11 @@ namespace ENetServer.Network
                             QueueDisconnectOne(netSendObject);
                             break;
                         }
+                    case SendType.Disconnect_Many:
+                        {
+                            QueueDisconnectMany(netSendObject);
+                            break;
+                        }
                     case SendType.Disconnect_All:
                         {
                             QueueDisconnectAll(netSendObject);
@@ -161,6 +166,11 @@ namespace ENetServer.Network
                     case SendType.Message_One:
                         {
                             QueueMessageOne(netSendObject);
+                            break;
+                        }
+                    case SendType.Message_Many:
+                        {
+                            QueueMessageMany(netSendObject);
                             break;
                         }
                     case SendType.Message_All:
@@ -176,12 +186,13 @@ namespace ENetServer.Network
                     case SendType.TestSend:
                         {
                             // TODO: REMOVE THIS TEST CASE
-                            Connections.GetValueOrDefault(netSendObject.Connection.ID);   // SIMULATE GETTING PEER FOR ACTUAL SEND
+                            Connections.GetValueOrDefault(netSendObject.PeerParams.ID); // SIMULATE GETTING PEER FOR ACTUAL SEND
 
                             if (netSendObject.Bytes != null)
                             {
+                                Connection tempConnection = new(true);
                                 NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromTestRecv(
-                                    netSendObject.Connection, netSendObject.Bytes);
+                                    tempConnection, netSendObject.Bytes);
                                 netRecvQueue.Enqueue(netRecvObject);
                             }
                             break;
@@ -271,8 +282,8 @@ namespace ENetServer.Network
         internal void QueueConnectOne(NetSendObject netSendObject)
         {
             // Verify not trying to connect to a Host already connected to.
-            string ip = netSendObject.Connection.IP;
-            ushort port = netSendObject.Connection.Port;
+            string ip = netSendObject.PeerParams.IP;
+            ushort port = netSendObject.PeerParams.Port;
             foreach (var peerConnection in Connections)
             {
                 if (peerConnection.Value.Connection.IP == ip && peerConnection.Value.Connection.Port == port)
@@ -284,8 +295,8 @@ namespace ENetServer.Network
 
             // Create Address object with IP and Port from NetSendObject.
             Address remoteAddress = new();
-            remoteAddress.SetIP(netSendObject.Connection.IP);
-            remoteAddress.Port = netSendObject.Connection.Port;
+            remoteAddress.SetIP(netSendObject.PeerParams.IP);
+            remoteAddress.Port = netSendObject.PeerParams.Port;
 
             // Queue connect to remote address.
             try
@@ -305,17 +316,12 @@ namespace ENetServer.Network
         /// <summary>
         /// Queues disconnect request for one remote host to be sent next tick.
         /// </summary>
-        /// <param name="netSendObject"> NetSendObject containing relevant peer data. </param>
+        /// <param name="netSendObject">  </param>
         internal void QueueDisconnectOne(NetSendObject netSendObject)
         {
-            bool forServer = netSendObject.Connection.IsServer;
-
             // Only if a peer with this ID is found.
-            if (Connections.TryGetValue(netSendObject.Connection.ID, out PeerConnection? peerConnection))
+            if (Connections.TryGetValue(netSendObject.PeerParams.ID, out PeerConnection? peerConnection))
             {
-                // Only enqueue Connection that matches intended whether client/server.
-                if (peerConnection.Connection.IsServer != forServer) return;
-
                 // Verify that the peer is valid.
                 Peer peer = peerConnection.Peer;
                 if (peer.State != PeerState.Connected) return;
@@ -326,24 +332,63 @@ namespace ENetServer.Network
         }
 
         /// <summary>
-        /// Queues disconnect requests to be sent to all connected remote hosts next tick.
+        /// Queues disconnect requests to all remote hosts with IDs contained in the NetSendObject.
         /// </summary>
+        /// <param name="netSendObject">  </param>
+        internal void QueueDisconnectMany(NetSendObject netSendObject)
+        {
+            // Iterate over IDArray and try to disconnect any valid Connection with the ID.
+            foreach (var id in netSendObject.PeerParams.IDArray)
+            {
+                // Only if a peer with this ID is found.
+                if (Connections.TryGetValue(id, out PeerConnection? peerConnection))
+                {
+                    // Verify that the peer is valid.
+                    Peer peer = peerConnection.Peer;
+                    if (peer.State != PeerState.Connected) return;
+
+                    // Disconnect with default data value.
+                    peer.Disconnect(0u);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Queues disconnect requests to be sent to all connected remote hosts matching
+        ///  the HostType contained in the NetSendObject.
+        /// </summary>
+        /// <param name="netSendObject">  </param>
         internal void QueueDisconnectAll(NetSendObject netSendObject)
         {
-            bool forServer = netSendObject.Connection.IsServer;
+            HostType hostType = netSendObject.PeerParams.HostType;
 
-            // Iterate over all peers of correct type, sending packet to all except matching.
-            foreach (var peerConnection in Connections)
+            // If HostType is both, do not do any filtering.
+            if (hostType == HostType.Both)
             {
-                // Only enqueue Connections that match intended whether client/server.
-                if (peerConnection.Value.Connection.IsServer != forServer) continue;
+                foreach (var peerConnection in Connections)
+                {
+                    // Verify that the peer is valid.
+                    Peer peer = peerConnection.Value.Peer;
+                    if (peer.State != PeerState.Connected) continue;
 
-                // Verify that the peer is valid.
-                Peer peer = peerConnection.Value.Peer;
-                if (peer.State != PeerState.Connected) continue;
+                    // Disconnect with default data value.
+                    peer.Disconnect(0u);
+                }
+            }
+            // Else if HostType is exclusively one or the other, filter each Connection.
+            else if (hostType == HostType.Server || hostType == HostType.Client)
+            {
+                bool isServer = (netSendObject.PeerParams.HostType == HostType.Server);
+                foreach (var peerConnection in Connections)
+                {
+                    // Skip wrong HostType peers.
+                    if (peerConnection.Value.Connection.IsServer == isServer) continue;
 
-                // Disconnect with default data value.
-                peer.Disconnect(0u);
+                    Peer peer = peerConnection.Value.Peer;
+                    if (peer.State != PeerState.Connected) continue;
+
+                    peer.Disconnect(0u);
+                }
             }
         }
 
@@ -356,24 +401,45 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
         internal void QueueMessageOne(NetSendObject netSendObject)
         {
-            bool forServer = netSendObject.Connection.IsServer;
+            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            Packet packet = default;
+            packet.Create(netSendObject.Bytes);
 
             // Only if a peer with this ID is found.
-            if (Connections.TryGetValue(netSendObject.Connection.ID, out PeerConnection? peerConnection))
+            if (Connections.TryGetValue(netSendObject.PeerParams.ID, out PeerConnection? peerConnection))
             {
-                // Only enqueue Connection that matches intended whether client/server.
-                if (peerConnection.Connection.IsServer != forServer) return;
-
                 // Verify that the peer is valid.
                 Peer peer = peerConnection.Peer;
                 if (peer.State != PeerState.Connected) return;
 
-                // Create packet from passed-in byte[], which is already in ready-to-send format.
-                Packet packet = default;
-                packet.Create(netSendObject.Bytes);
-
                 // TEMP send on channel 0.
                 peer.Send(0, ref packet);
+            }
+        }
+
+        /// <summary>
+        /// Queues messages to be sent to all remote hosts with IDs contained in the NetSendObject.
+        /// </summary>
+        /// <param name="netSendObject">  </param>
+        internal void QueueMessageMany(NetSendObject netSendObject)
+        {
+            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            Packet packet = default;
+            packet.Create(netSendObject.Bytes);
+
+            // Iterate over IDArray and try to message any valid Connection with the ID.
+            foreach (var id in netSendObject.PeerParams.IDArray)
+            {
+                // Only if a peer with this ID is found.
+                if (Connections.TryGetValue(id, out PeerConnection? peerConnection))
+                {
+                    // Verify that the peer is valid.
+                    Peer peer = peerConnection.Peer;
+                    if (peer.State != PeerState.Connected) return;
+
+                    // TEMP send on channel 0.
+                    peer.Send(0, ref packet);
+                }
             }
         }
 
@@ -383,24 +449,40 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
         internal void QueueMessageAll(NetSendObject netSendObject)
         {
-            bool forServer = netSendObject.Connection.IsServer;
+            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            Packet packet = default;
+            packet.Create(netSendObject.Bytes);
 
-            // Iterate over all clients, sending packet to all except matching.
-            foreach (var peerConnection in Connections)
+            HostType hostType = netSendObject.PeerParams.HostType;
+
+            // If HostType is both, do not do any filtering.
+            if (hostType == HostType.Both)
             {
-                // Only enqueue Connections that match intended whether client/server.
-                if (peerConnection.Value.Connection.IsServer != forServer) continue;
+                foreach (var peerConnection in Connections)
+                {
+                    // Verify that the peer is valid.
+                    Peer peer = peerConnection.Value.Peer;
+                    if (peer.State != PeerState.Connected) continue;
 
-                // Verify that the peer is valid.
-                Peer peer = peerConnection.Value.Peer;
-                if (peer.State != PeerState.Connected) continue;
+                    // TEMP send on channel 0.
+                    peer.Send(0, ref packet);
+                }
+            }
+            // Else if HostType is exclusively one or the other, filter each Connection.
+            else if (hostType == HostType.Server || hostType == HostType.Client)
+            {
+                bool isServer = (netSendObject.PeerParams.HostType == HostType.Server);
+                foreach (var peerConnection in Connections)
+                {
+                    // Skip wrong HostType peers.
+                    if (peerConnection.Value.Connection.IsServer == isServer) continue;
 
-                // Create packet from passed-in byte[], which is already in ready-to-send format.
-                Packet packet = default;
-                packet.Create(netSendObject.Bytes);
+                    Peer peer = peerConnection.Value.Peer;
+                    if (peer.State != PeerState.Connected) continue;
 
-                // TEMP send on channel 0.
-                peer.Send(0, ref packet);
+                    // TEMP send on channel 0.
+                    peer.Send(0, ref packet);
+                }
             }
         }
 
@@ -410,25 +492,44 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
         internal void QueueMessageAllExcept(NetSendObject netSendObject)
         {
-            bool forServer = netSendObject.Connection.IsServer;
+            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            Packet packet = default;
+            packet.Create(netSendObject.Bytes);
 
-            // Iterate over all connections, sending packet to all except matching.
-            foreach (var peerConnection in Connections)
+            HostType hostType = netSendObject.PeerParams.HostType;
+
+            // If HostType is both, do not do any filtering.
+            if (hostType == HostType.Both)
             {
-                // Only enqueue Connections that match intended whether client/server.
-                if (peerConnection.Value.Connection.IsServer != forServer) continue;
-                if (peerConnection.Key == netSendObject.Connection.ID) continue;    // Skipped passed-in Connection peer.
+                foreach (var peerConnection in Connections)
+                {
+                    // Skipped passed-in peer ID.
+                    if (peerConnection.Key == netSendObject.PeerParams.ID) continue;
 
-                // Verify that the peer is valid.
-                Peer peer = peerConnection.Value.Peer;
-                if (peer.State != PeerState.Connected) continue;
+                    // Verify that the peer is valid.
+                    Peer peer = peerConnection.Value.Peer;
+                    if (peer.State != PeerState.Connected) continue;
 
-                // Create packet from passed-in byte[], which is already in ready-to-send format.
-                Packet packet = default;
-                packet.Create(netSendObject.Bytes);
+                    // TEMP send on channel 0.
+                    peer.Send(0, ref packet);
+                }
+            }
+            // Else if HostType is exclusively one or the other, filter each Connection.
+            else if (hostType == HostType.Server || hostType == HostType.Client)
+            {
+                bool isServer = (netSendObject.PeerParams.HostType == HostType.Server);
+                foreach (var peerConnection in Connections)
+                {
+                    // Skip wrong HostType peers AND passed-in peer ID.
+                    if (peerConnection.Value.Connection.IsServer == isServer) continue;
+                    if (peerConnection.Key == netSendObject.PeerParams.ID) continue;
 
-                // TEMP send on channel 0.
-                peer.Send(0, ref packet);
+                    Peer peer = peerConnection.Value.Peer;
+                    if (peer.State != PeerState.Connected) continue;
+
+                    // TEMP send on channel 0.
+                    peer.Send(0, ref packet);
+                }
             }
         }
 
@@ -441,7 +542,7 @@ namespace ENetServer.Network
             // If below client port minimum, is server (server min (7777) is always less than client min (8888)).
             bool isServer = connectEvent.Peer.Port < NetworkManager.Instance.ClientPortMin;
 
-            // Create new PeerConnection and add to correct map.
+            // Create new PeerConnection (which creates a new Connection) and add to map.
             PeerConnection peerConnection = new(connectEvent.Peer, isServer);
             Connections.Add(peerConnection.Peer.ID, peerConnection);
 

@@ -20,6 +20,13 @@ namespace ENetServer.NetObjects
         internal Connection Connection { get; private set; }
         internal byte[]? Bytes { get; private set; }
 
+        private NetRecvObject(RecvType recvType, Connection connection)
+        {
+            RecvType = recvType;
+            Connection = connection;
+            // Bytes remains null.
+        }
+
         private NetRecvObject(RecvType recvType, Connection connection, byte[]? bytes)
         {
             RecvType = recvType;
@@ -30,55 +37,66 @@ namespace ENetServer.NetObjects
 
 
         /// <summary>
-        /// Factory responsible for creating NetworkRecvObjects. Each creator method corresponds to
+        /// Factory responsible for creating NetRecvObjects. Each creator method corresponds to
         ///  one RecvType.
         /// </summary>
         internal static class Factory
         {
+            // NOTE: Each of the below Factory methods are almost identical (generally violating
+            //  the DRY principle) and could reasonably be consolidated into two methods: those
+            //  with payload data, and those without.
+            // However, using separate Factory methods for each RecvType enforces safe object
+            //  creation and guarantees that the receive event being handled will be accurately
+            //  represented within the NetObject. It eliminates the possibility of a mismatch
+            //  between the event type and the stored RecvType (ex. a Message receive event that
+            //  has a null payload reference).
+
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'connect' ENet event. Requires only
+            /// Creates and returns a new NetRecvObject from a 'connect' ENet event. Requires only
             ///  peer information (no byte[] payload).
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just connected. </param>
-            /// <returns> The newly created 'connect' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'connect' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromConnect(Connection connection)
             {
-                return new NetRecvObject(RecvType.Connect, connection, null);
+                return new NetRecvObject(RecvType.Connect, connection);
             }
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'disconnect' ENet event. Requires
+            /// Creates and returns a new NetRecvObject from a 'disconnect' ENet event. Requires
             ///  only peer information (no byte[] payload).
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just disconnected. </param>
-            /// <returns> The newly created 'disconnect' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'disconnect' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromDisconnect(Connection connection)
             {
-                return new NetRecvObject(RecvType.Disconnect, connection, null);
+                return new NetRecvObject(RecvType.Disconnect, connection);
             }
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'timeout' ENet event. Requires
+            /// Creates and returns a new NetRecvObject from a 'timeout' ENet event. Requires
             ///  only peer information (no byte[] payload).
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just timed out. </param>
-            /// <returns> The newly created 'timeout' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'timeout' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromTimeout(Connection connection)
             {
-                return new NetRecvObject(RecvType.Timeout, connection, null);
+                return new NetRecvObject(RecvType.Timeout, connection);
             }
 
             /// <summary>
-            /// Creates and returns a new NetworkRecvObject from a 'message' ENet event. Requires
+            /// Creates and returns a new NetRecvObject from a 'message' ENet event. Requires
             ///  peer information and byte[] payload of incoming message packet.
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that message was received from. </param>
             /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
-            /// <returns> The newly created 'message' NetworkRecvObject. </returns>
+            /// <returns> The newly created 'message' NetRecvObject. </returns>
             internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes)
             {
                 return new NetRecvObject(RecvType.Message, connection, bytes);
             }
+
+
 
             /// <summary>
             /// Creates and returns a new TEST NetRecvObject, which was not actually received over the

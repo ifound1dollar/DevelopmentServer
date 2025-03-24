@@ -3,6 +3,7 @@ using ENetServer.NetObjects;
 using ENetServer.NetObjects.DataObjects;
 using ENetServer.Network;
 using System.Diagnostics;
+using static ENetServer.NetStatics;
 
 namespace ServerExample
 {
@@ -68,7 +69,7 @@ namespace ServerExample
                     }
                     else if (inputLower == "dc")
                     {
-                        ServerDisconnectAllClients();
+                        ServerDisconnectAllRemoteHosts();
                     }
                     else if (inputLower == "tr")
                     {
@@ -137,16 +138,11 @@ namespace ServerExample
         /// <summary>
         /// Instructs the server to disconnect all connected clients on next Tick.
         /// </summary>
-        public static void ServerDisconnectAllClients()
+        public static void ServerDisconnectAllRemoteHosts()
         {
             Console.WriteLine("[ACTION] Disconnecting all remote hosts.");
 
-            // Servers
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(new Connection(true));
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
-
-            // Clients
-            gameSendObject = GameSendObject.Factory.CreateDisconnectAll(new Connection(false));
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -165,7 +161,7 @@ namespace ServerExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(new Connection(false), gameDataObject);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -190,7 +186,7 @@ namespace ServerExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(new Connection(false), gameDataObject);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -247,7 +243,7 @@ namespace ServerExample
 
                     if (gameDataObject != null)
                     {
-                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(new Connection(true), gameDataObject);
+                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(sendCounter, gameDataObject);
                         NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
                         sendCounter++;
 

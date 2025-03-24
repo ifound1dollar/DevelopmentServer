@@ -18,13 +18,20 @@ namespace ENetServer.NetObjects
     public class GameSendObject
     {
         public SendType SendType { get; }
-        public Connection Connection { get; }
+        public PeerParams PeerParams { get; }
         public GameDataObject? GameDataObject { get; }
 
-        private GameSendObject(SendType sendType, Connection connection, GameDataObject? gameDataObject)
+        private GameSendObject(SendType sendType, PeerParams peerParams)
         {
             SendType = sendType;
-            Connection = connection;
+            PeerParams = peerParams;
+            // GameDataObject remains null.
+        }
+
+        private GameSendObject(SendType sendType, PeerParams peerParams, GameDataObject? gameDataObject)
+        {
+            SendType = sendType;
+            PeerParams = peerParams;
             GameDataObject = gameDataObject;
         }
 
@@ -36,86 +43,122 @@ namespace ENetServer.NetObjects
         /// </summary>
         public static class Factory
         {
+            // NOTE: Using dedicated Factory methods for each SendType enforces safe object
+            //  creation and ensures that there will not be a mismatch between the intended
+            //  send operation and the object's actual SendType.
+            // Additionally, taking raw data as arguments rather than a pre-constructed
+            //  PeerParams object further reinforces this design principle, as the wrong
+            //  parameters cannot be sent for the intended SendType (ex. passing a Connect-
+            //  ready PeerParams object with a Disconnect_One SendType).
+
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for connecting to one remote
-            ///  host. Requires an IP address and a port number.
+            /// Creates and returns a new GameSendObject for connecting to one remote host.
             /// </summary>
-            /// <param name="connection"> Connection containing data for peer to connect to. </param>
-            /// <returns></returns>
-            public static GameSendObject CreateConnectOne(Connection connection)
+            /// <param name="ip"> IP address of peer attempting to connect to. </param>
+            /// <param name="port"> Port of peer attempting to connect to. </param>
+            /// <returns> The newly created 'connect one' GameSendObject. </returns>
+            public static GameSendObject CreateConnectOne(string ip, ushort port)
             {
-                return new GameSendObject(SendType.Connect_One, connection, null);
+                PeerParams peerParams = new(ip, port);
+                return new GameSendObject(SendType.Connect_One, peerParams);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for disconnecting one remote
-            ///  host. Requires only a valid Connection object.
+            /// Creates and returns a new GameSendObject for disconnecting [from] one remote host.
             /// </summary>
-            /// <param name="connection"> Connection for remote host to disconnect. </param>
+            /// <param name="id"> ID of peer to disconnect [from]. </param>
             /// <returns> The newly created 'disconnect one' GameSendObject. </returns>
-            public static GameSendObject CreateDisconnectOne(Connection connection)
+            public static GameSendObject CreateDisconnectOne(uint id)
             {
-                return new GameSendObject(SendType.Disconnect_One, connection, null);
+                PeerParams peerParams = new(id);
+                return new GameSendObject(SendType.Disconnect_One, peerParams);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for disconnecting all remote
-            ///  hosts. Requires no parameters because it is a universal operation.
+            /// Creates and returns a new GameSendObject for disconnecting [from] many remote hosts.
             /// </summary>
-            /// <param name="connection"> Connection containing only whether to disconnect server or client peers. </param>
+            /// <param name="idArray"> Array of peer IDs of hosts to disconnect [from]. </param>
+            /// <returns></returns>
+            public static GameSendObject CreateDisconnectMany(uint[] idArray)
+            {
+                PeerParams peerParams = new(idArray);
+                return new GameSendObject(SendType.Disconnect_Many, peerParams);
+            }
+
+            /// <summary>
+            /// Creates and returns a new GameSendObject for disconnecting [from] all remote hosts.
+            /// </summary>
+            /// <param name="hostType"> HostType that all peers must match (can be Both, should not be None). </param>
             /// <returns> The newly created 'disconnect all' GameSendObject. </returns>
-            public static GameSendObject CreateDisconnectAll(Connection connection)
+            public static GameSendObject CreateDisconnectAll(HostType hostType)
             {
-                return new GameSendObject(SendType.Disconnect_All, connection, null);
+                PeerParams hostParams = new(hostType);
+                return new GameSendObject(SendType.Disconnect_All, hostParams);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for messaging one remote host.
-            ///  Requires a valid non-null Connection and GameDataObject.
+            /// Creates and returns a new GameSendObject for messaging one remote host.
             /// </summary>
-            /// <param name="connection"> Connection for remote host to message. </param>
+            /// <param name="id"> ID of peer to message. </param>
             /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
             /// <returns> The newly created 'message one' GameSendObject. </returns>
-            public static GameSendObject CreateMessageOne(Connection connection, GameDataObject gameDataObject)
+            public static GameSendObject CreateMessageOne(uint id, GameDataObject gameDataObject)
             {
-                return new GameSendObject(SendType.Message_One, connection, gameDataObject);
+                PeerParams peerParams = new(id);
+                return new GameSendObject(SendType.Message_One, peerParams, gameDataObject);
             }
 
+            /// <summary>
+            /// Creates and returns a new GameSendObject for messaging many remote hosts.
+            /// </summary>
+            /// <param name="idArray"> Array of peer IDs of hosts to message. </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns></returns>
+            public static GameSendObject CreateMessageMany(uint[] idArray, GameDataObject gameDataObject)
+            {
+                PeerParams peerParams = new(idArray);
+                return new GameSendObject(SendType.Message_Many, peerParams, gameDataObject);
+            }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for messaging all remote
-            ///  hosts. Requires only a valid non-null GameDataObject.
+            /// Creates and returns a new GameSendObject for messaging all remote hosts.
             /// </summary>
-            /// <param name="connection"> Connection containing only whether to disconnect server or client peers. </param>
+            /// <param name="hostType"> HostType all peers must match (can be Both, should not be None). </param>
             /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
             /// <returns> The newly created 'message all' GameSendObject. </returns>
-            public static GameSendObject CreateMessageAll(Connection connection, GameDataObject gameDataObject)
+            public static GameSendObject CreateMessageAll(HostType hostType, GameDataObject gameDataObject)
             {
-                return new GameSendObject(SendType.Message_All, connection, gameDataObject);
+                PeerParams hostParams = new(hostType);
+                return new GameSendObject(SendType.Message_All, hostParams, gameDataObject);
             }
 
             /// <summary>
-            /// Creates and returns a new GameSendObject formatted for message all remote hosts
-            ///  except one. Requires a valid non-null Connection and GameDataObject.
+            /// Creates and returns a new GameSendObject for messaging all remote hosts
+            ///  except one.
             /// </summary>
-            /// <param name="connection"> Connection for remote host to ignore. </param>
+            /// <param name="hostType"> HostType all peers must match (can be Both, should not be None). </param>
+            /// <param name="id"> ID of host to ignore. </param>
             /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
             /// <returns> The newly created 'message all except' GameSendObject. </returns>
-            public static GameSendObject CreateMessageAllExcept(Connection connection, GameDataObject gameDataObject)
+            public static GameSendObject CreateMessageAllExcept(HostType hostType, uint id, GameDataObject gameDataObject)
             {
-                return new GameSendObject(SendType.Message_AllExcept, connection, gameDataObject);
+                PeerParams peerParams = new(hostType, id);
+                return new GameSendObject(SendType.Message_AllExcept, peerParams, gameDataObject);
             }
+
+
 
             /// <summary>
             /// Creates and returns a new TEST GameSendObject, which is not sent over the network but
             ///  instead is re-queued by the network thread.
             /// </summary>
-            /// <param name="connection"> TEST Connection object to simulate message send overhead. </param>
+            /// <param name="id"> TEST peer ID to simulate message send overhead. </param>
             /// <param name="gameDataObject"> TEST GameDataObject to simulate message send overhead. </param>
             /// <returns> The newly created TEST GameSendObject. </returns>
-            public static GameSendObject CreateTestSend(Connection connection, GameDataObject gameDataObject)
+            public static GameSendObject CreateTestSend(uint id, GameDataObject gameDataObject)
             {
-                return new GameSendObject(SendType.TestSend, connection, gameDataObject);
+                PeerParams peerParams = new(id);
+                return new GameSendObject(SendType.TestSend, peerParams, gameDataObject);
             }
 
         }
