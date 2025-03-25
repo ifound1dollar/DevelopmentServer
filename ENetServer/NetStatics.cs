@@ -14,8 +14,13 @@ namespace ENetServer
         public enum HostType { None, Server, Client, Both }
         public enum SendType { None, Connect_One, Disconnect_One, Disconnect_Many, Disconnect_All,
             Message_One, Message_Many, Message_All, Message_AllExcept, TestSend }
+        public enum ActionType { None, Connect_One, Disconnect_One, Disconnect_Many, Disconnect_All }
+        public enum MessageType { None, Message_One, Message_Many, Message_All, Message_All_Except, TestMessage }
         public enum RecvType { None, Connect, Disconnect, Timeout, Message, TestRecv }
 
+
+        public static ushort ServerPortMin { get; } = 7777;
+        public static ushort ClientPortMin { get; } = 8888;
 
 
         #region String and Packet Helpers

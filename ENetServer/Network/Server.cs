@@ -58,7 +58,7 @@ namespace ENetServer.Network
         /// <param name="port"> Port that the host will listen on. </param>
         /// <param name="peerLimit"> Maximum number of peers that can be connected at once (library limits to 4096). </param>
         /// <param name="channelLimit"> Maximum number of channels that can be used for communication with this host. </param>
-        internal void SetHostParameters(string ip = "127.0.0.1", ushort port = 7777, int peerLimit = 64, int channelLimit = 2)
+        internal void SetHostParameters(string ip, ushort port, int peerLimit, int channelLimit)
         {
             // Address for this server host.
             address = new();
@@ -281,9 +281,13 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant remote host data. </param>
         internal void QueueConnectOne(NetSendObject netSendObject)
         {
-            // Verify not trying to connect to a Host already connected to.
             string ip = netSendObject.PeerParams.IP;
             ushort port = netSendObject.PeerParams.Port;
+
+            // Verify port is within valid range (outbound connections can only ever be to servers).
+            if (port < ServerPortMin && port >= ClientPortMin) return;
+
+            // Verify not trying to connect to a Host already connected to.
             foreach (var peerConnection in Connections)
             {
                 if (peerConnection.Value.Connection.IP == ip && peerConnection.Value.Connection.Port == port)
@@ -304,6 +308,7 @@ namespace ENetServer.Network
                 Peer? pendingPeer = serverHost?.Connect(remoteAddress);
                 if (pendingPeer != null)
                 {
+                    pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
                     AllPeers.Add(pendingPeer.Value);
                 }
             }
@@ -540,7 +545,7 @@ namespace ENetServer.Network
         private void HandleConnectEvent(ref Event connectEvent)
         {
             // If below client port minimum, is server (server min (7777) is always less than client min (8888)).
-            bool isServer = connectEvent.Peer.Port < NetworkManager.Instance.ClientPortMin;
+            bool isServer = connectEvent.Peer.Port < ClientPortMin;
 
             // Create new PeerConnection (which creates a new Connection) and add to map.
             PeerConnection peerConnection = new(connectEvent.Peer, isServer);

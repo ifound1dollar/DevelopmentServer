@@ -17,17 +17,17 @@ namespace ClientExample
             try
             {
                 // FIRST, ask user for port.
-                Console.Write("Enter port number to run client host on (minimum {0}): ", NetworkManager.Instance.ClientPortMin);
+                Console.Write("Enter port number to run client host on (minimum {0}): ", ClientPortMin);
                 string? userInput = Console.ReadLine();
                 bool validPort = false;
-                ushort argPort = NetworkManager.Instance.ClientPortMin;
+                ushort argPort = ClientPortMin;
                 if (userInput != null)
                 {
                     validPort = ushort.TryParse(userInput, out argPort);
-                    if (argPort < NetworkManager.Instance.ClientPortMin)
+                    if (argPort < ClientPortMin)
                     {
                         Console.WriteLine("Port number out of range, defaulting to 8888.");
-                        argPort = NetworkManager.Instance.ClientPortMin;
+                        argPort = ClientPortMin;
                     }
                 }
 
@@ -51,7 +51,7 @@ namespace ClientExample
                 }
                 else
                 {
-                    NetworkManager.Instance.SetupAsClient();
+                    NetworkManager.Instance.SetupAsClient(ClientPortMin);
                 }
                 NetworkManager.Instance.StartThreadedOperations();
 

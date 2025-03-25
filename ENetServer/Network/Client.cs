@@ -42,7 +42,6 @@ namespace ENetServer.Network
         /// Map of all servers this client is connected to in form ID:PeerConnection.
         /// </summary>
         private Dictionary<uint, PeerConnection> Connections { get; } = new();
-        private Peer PrimaryServerPeer { get; set; }
         private HashSet<Peer> AllPeers { get; } = new();
 
         internal Address GetAddress()
@@ -50,7 +49,7 @@ namespace ENetServer.Network
             return address;
         }
 
-        
+
 
         #region Setup / Start / Stop / Run Operations
 
@@ -59,8 +58,9 @@ namespace ENetServer.Network
         /// </summary>
         /// <param name="ip"> IP address of this host will run on (useless?). </param>
         /// <param name="port"> Port this host will run on. </param>
+        /// <param name="peerLimit"> Maximum number of peers that can be connected at once (library limits to 4096). </param>
         /// <param name="channelLimit"> Maximum number of channels that can be used for communication with this host. </param>
-        internal void SetHostParameters(string ip = "127.0.0.1", ushort port = 8888, int peerLimit = 64, int channelLimit = 2)
+        internal void SetHostParameters(string ip, ushort port, int peerLimit, int channelLimit)
         {
             address = new();
             address.SetIP(ip);
@@ -78,6 +78,7 @@ namespace ENetServer.Network
             // Create the client host with address, defined peer limit, defined channel limit, no bandwidth limit.
             clientHost = new();
             clientHost.Create(address, peerLimit, channelLimit, 0u, 0u, 1024*1024);
+            clientHost.PreventConnections(true);    //TODO: VERIFY THAT THIS DOES NOT STOP CONNECTING TO OTHERS
         }
 
         /// <summary>
@@ -183,7 +184,7 @@ namespace ENetServer.Network
                     case SendType.TestSend:
                         {
                             // TODO: REMOVE THIS TEST CASE
-                            bool set = PrimaryServerPeer.IsSet;    // SIMULATE CHECKING CONNECTION FOR ACTUAL SEND
+                            Connections.GetValueOrDefault(netSendObject.PeerParams.ID); // SIMULATE GETTING PEER FOR ACTUAL SEND
 
                             if (netSendObject.Bytes != null)
                             {
@@ -276,9 +277,13 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant server data. </param>
         internal void QueueConnectOne(NetSendObject netSendObject)
         {
-            // Verify not trying to connect to a Host already connected to.
             string ip = netSendObject.PeerParams.IP;
             ushort port = netSendObject.PeerParams.Port;
+
+            // Verify port is within valid range (outbound connections can only ever be to servers).
+            if (port < ServerPortMin && port >= ClientPortMin) return;
+
+            // Verify not trying to connect to a Host already connected to.
             foreach (var peerConnection in Connections)
             {
                 if (peerConnection.Value.Connection.IP == ip && peerConnection.Value.Connection.Port == port)
@@ -299,6 +304,7 @@ namespace ENetServer.Network
                 Peer? pendingPeer = clientHost?.Connect(remoteAddress);
                 if (pendingPeer != null)
                 {
+                    pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
                     AllPeers.Add(pendingPeer.Value);
                 }
             }
@@ -446,7 +452,7 @@ namespace ENetServer.Network
         private void HandleConnectEvent(ref Event connectEvent)
         {
             // If new connection is from another client, immediately disconnect that Peer.
-            if (connectEvent.Peer.Port >= NetworkManager.Instance.ClientPortMin)
+            if (connectEvent.Peer.Port >= ClientPortMin)
             {
                 connectEvent.Peer.Disconnect(0u);   // THIS GUARANTEES ALL PEERS/CONNECTIONS ARE SERVERS
             }

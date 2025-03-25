@@ -65,8 +65,6 @@ namespace ENetServer
 
         // Publicly accessible, these are readonly (in practice) so thread-safe.
         public bool IsServer { get; private set; }
-        public ushort ServerPortMin { get; } = 7777;
-        public ushort ClientPortMin { get; } = 8888;
 
         // These are nullable so they can be manually initialized in Setup().
         private SerializeWorker? serializeWorker;
@@ -80,7 +78,7 @@ namespace ENetServer
         /// <summary>
         /// Sets up NetworkManager as server, initializing and configuring thread workers.
         /// </summary>
-        public void SetupAsServer(ushort port = 7777)
+        public void SetupAsServer(ushort port)
         {
             // Throw exception if NetworkManager has already been initialized.
             if (state != State.Uninitialized)
@@ -99,7 +97,7 @@ namespace ENetServer
         /// <summary>
         /// Sets up NetworkManager as client, initializing and configuring thread workers.
         /// </summary>
-        public void SetupAsClient(ushort port = 8888)
+        public void SetupAsClient(ushort port)
         {
             // Throw exception if NetworkManager has already been initialized.
             if (state != State.Uninitialized)
@@ -293,7 +291,7 @@ namespace ENetServer
 
                 // INITIALIZE ENET SERVER, BUT DO NOT CREATE SERVER YET.
                 server = new Server(Instance.NetSendQueue, Instance.NetRecvQueue);
-                server.SetHostParameters(port: port);   // SET HOST PARAMETERS HERE (HAVE DEFAULT VALUES)
+                server.SetHostParameters("127.0.0.1", port, 64, 2);
             }
 
 
@@ -360,7 +358,7 @@ namespace ENetServer
 
                 // INITIALIZE ENET CLIENT, BUT DO NOT CREATE HOST YET.
                 client = new Client(Instance.NetSendQueue, Instance.NetRecvQueue);
-                client.SetHostParameters(port: port);
+                client.SetHostParameters("127.0.0.1", port, 64, 2);
             }
 
 
