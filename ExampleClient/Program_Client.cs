@@ -160,8 +160,8 @@ namespace ClientExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            ActionSendObject actionSendObject = ActionSendObject.Factory.CreateConnectOne(ip, port);
+            NetworkManager.Instance.EnqueueActionForSend(actionSendObject);
         }
 
         /// <summary>
@@ -175,8 +175,8 @@ namespace ClientExample
             // Try to find a Connection object for this peer ID, enqueuing if found.
             if (GameSimulator.Connections.TryGetValue(peerId, out var connection))
             {
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(connection.ID);
-                NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+                ActionSendObject actionSendObject = ActionSendObject.Factory.CreateDisconnectOne(connection.ID);
+                NetworkManager.Instance.EnqueueActionForSend(actionSendObject);
             }
             else
             {
@@ -191,8 +191,8 @@ namespace ClientExample
         {
             Console.WriteLine("[ACTION] Disconnecting from all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            ActionSendObject actionSendObject = ActionSendObject.Factory.CreateDisconnectAll(HostType.Both);
+            NetworkManager.Instance.EnqueueActionForSend(actionSendObject);
         }
 
         /// <summary>
@@ -210,8 +210,8 @@ namespace ClientExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Server, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            MessageSendObject messageSendObject = MessageSendObject.Factory.CreateMessageAll(HostType.Server, gameDataObject);
+            NetworkManager.Instance.EnqueueMessageForSend(messageSendObject);
         }
 
         /// <summary>
@@ -235,8 +235,8 @@ namespace ClientExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Server, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            MessageSendObject messageSendObject = MessageSendObject.Factory.CreateMessageAll(HostType.Server, gameDataObject);
+            NetworkManager.Instance.EnqueueMessageForSend(messageSendObject);
         }
 
         /// <summary>

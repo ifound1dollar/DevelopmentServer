@@ -19,19 +19,25 @@ namespace ENetServer.Network
         private int channelLimit;
 
         // QUEUE REFERENCES
-        private readonly ConcurrentQueue<NetSendObject> netSendQueue;
-        private readonly ConcurrentQueue<NetRecvObject> netRecvQueue;
+        private readonly ConcurrentQueue<ActionSendObject> gameToNetQueue;
+        private readonly ConcurrentQueue<ActionRecvObject> netToGameQueue;
+        private readonly ConcurrentQueue<MessageSendObject> serializeToNetQueue;
+        private readonly ConcurrentQueue<MessageRecvObject> netToSerializeQueue;
 
         /// <summary>
         /// Constructs a Server object with references to network concurrent queues.
         /// </summary>
         /// <param name="netSendQueue"> Reference to network send queue. </param>
         /// <param name="netRecvQueue"> Reference to network receive queue. </param>
-        internal Server(ConcurrentQueue<NetSendObject> netSendQueue,
-            ConcurrentQueue<NetRecvObject> netRecvQueue)
+        internal Server(ConcurrentQueue<ActionSendObject> gameToNetQueue,
+            ConcurrentQueue<ActionRecvObject> netToGameQueue,
+            ConcurrentQueue<MessageSendObject> serializeToNetQueue,
+            ConcurrentQueue<MessageRecvObject> netToSerializeQueue)
         {
-            this.netSendQueue = netSendQueue;
-            this.netRecvQueue = netRecvQueue;
+            this.gameToNetQueue = gameToNetQueue;
+            this.netToGameQueue = netToGameQueue;
+            this.serializeToNetQueue = serializeToNetQueue;
+            this.netToSerializeQueue = netToSerializeQueue;
         }
 
 
@@ -130,71 +136,44 @@ namespace ENetServer.Network
         }
 
         /// <summary>
-        /// Handles net send tasks - read from network send queue, do ENet tasks (send, disconnect, etc.).
+        /// Handles send tasks - dequeues outgoing tasks, queues ENet operations.
         /// </summary>
-        internal void DoNetSendTasks()
+        internal void DoSendTasks()
         {
-            // Loop until network send queue is empty.
-            while (!netSendQueue.IsEmpty)
+            // TODO: CHANGE THIS TO GET SNAPSHOT AND LOOP THAT MANY TIMES, THEN MOVE ON
+            //  BUT NOT YET, TEST BEFORE DOING THIS
+            // The reason that send/receive operations during stress test are so mismatched
+            //  may be because the network thread was getting stuck pulling from the send
+            //  queue.
+
+            // Action send queue.
+            while (!gameToNetQueue.IsEmpty)
             {
-                // Try to dequeue item from serializeQueue, operating on the item if successful.
-                if (!netSendQueue.TryDequeue(out NetSendObject? netSendObject)) break;
+                //Console.WriteLine("Reading from GameToNetQueue");
 
-                // Operate based on send type.
-                switch (netSendObject.SendType)
+                // Try dequeue, then operate based on ActionType if successful.
+                if (!gameToNetQueue.TryDequeue(out ActionSendObject? actionSendObject)) break;
+
+                switch (actionSendObject.ActionType)
                 {
-                    case SendType.Connect_One:  // Will only be used to connect to other servers.
+                    case ActionType.Connect_One:
                         {
-                            QueueConnectOne(netSendObject);
+                            QueueConnectOne(actionSendObject);
                             break;
                         }
-                    case SendType.Disconnect_One:
+                    case ActionType.Disconnect_One:
                         {
-                            QueueDisconnectOne(netSendObject);
+                            QueueDisconnectOne(actionSendObject);
                             break;
                         }
-                    case SendType.Disconnect_Many:
+                    case ActionType.Disconnect_Many:
                         {
-                            QueueDisconnectMany(netSendObject);
+                            QueueDisconnectMany(actionSendObject);
                             break;
                         }
-                    case SendType.Disconnect_All:
+                    case ActionType.Disconnect_All:
                         {
-                            QueueDisconnectAll(netSendObject);
-                            break;
-                        }
-                    case SendType.Message_One:
-                        {
-                            QueueMessageOne(netSendObject);
-                            break;
-                        }
-                    case SendType.Message_Many:
-                        {
-                            QueueMessageMany(netSendObject);
-                            break;
-                        }
-                    case SendType.Message_All:
-                        {
-                            QueueMessageAll(netSendObject);
-                            break;
-                        }
-                    case SendType.Message_AllExcept:
-                        {
-                            QueueMessageAllExcept(netSendObject);
-                            break;
-                        }
-                    case SendType.TestSend:
-                        {
-                            // TODO: REMOVE THIS TEST CASE
-                            Connections.GetValueOrDefault(netSendObject.PeerParams.ID); // SIMULATE GETTING PEER FOR ACTUAL SEND
-
-                            if (netSendObject.Bytes != null)
-                            {
-                                Connection tempConnection = new(true);
-                                NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromTestRecv(
-                                    tempConnection, netSendObject.Bytes);
-                                netRecvQueue.Enqueue(netRecvObject);
-                            }
+                            QueueDisconnectAll(actionSendObject);
                             break;
                         }
                     // DO NOTHING FOR DEFAULT CASE
@@ -202,12 +181,62 @@ namespace ENetServer.Network
 
                 /* - outside of switch case, inside while loop - */
             }
+
+            // Message receive queue.
+            while (!serializeToNetQueue.IsEmpty)
+            {
+                //Console.WriteLine("Reading from SerializeToNetQueue");
+
+                // Try dequeue, then operate based on MessageType if successful.
+                if (!serializeToNetQueue.TryDequeue(out MessageSendObject? messageSendObject)) break;
+
+                switch (messageSendObject.MessageType)
+                {
+                    case MessageType.Message_One:
+                        {
+                            QueueMessageOne(messageSendObject);
+                            break;
+                        }
+                    case MessageType.Message_Many:
+                        {
+                            QueueMessageMany(messageSendObject);
+                            break;
+                        }
+                    case MessageType.Message_All:
+                        {
+                            QueueMessageAll(messageSendObject);
+                            break;
+                        }
+                    case MessageType.Message_All_Except:
+                        {
+                            QueueMessageAllExcept(messageSendObject);
+                            break;
+                        }
+                    case MessageType.TestMessage:
+                        {
+                            //TODO: REMOVE THIS TEST CASE
+                            Connections.GetValueOrDefault(messageSendObject.PeerParams.ID); // SIMULATE GETTING PEER FOR ACTUAL SEND
+
+                            if (messageSendObject.Bytes != null)
+                            {
+                                Connection tempConnection = new(true);
+                                MessageRecvObject messageReceiveObject = MessageRecvObject.Factory.CreateFromTestRecv(
+                                    tempConnection, messageSendObject.Bytes);
+                                netToSerializeQueue.Enqueue(messageReceiveObject);
+                            }
+                            break;
+                        }
+                        // DO NOTHING FOR DEFAULT CASE
+                }
+
+                /* - outside of switch case, inside while loop - */
+            }
         }
 
         /// <summary>
-        /// Handles net receive tasks - handles ENet events and runs host service, adds to network receive queue.
+        /// Handles receive tasks - handles ENet events and runs host service, adds to incoming queues.
         /// </summary>
-        internal void DoNetReceiveTasks()
+        internal void DoReceiveTasks()
         {
             // Each loop iteration (event poll/dispatch), checks for new events. This
             //  loop continues iterating until 'polled' is set to true, which only occurs when
@@ -278,11 +307,11 @@ namespace ENetServer.Network
         /// Queues connect request to be sent to one remote host next tick. Should only ever be used
         ///  to connect to other servers.
         /// </summary>
-        /// <param name="netSendObject"> NetSendObject containing relevant remote host data. </param>
-        internal void QueueConnectOne(NetSendObject netSendObject)
+        /// <param name="actionSendObject"> ActionSendObject containing relevant remote host data. </param>
+        internal void QueueConnectOne(ActionSendObject actionSendObject)
         {
-            string ip = netSendObject.PeerParams.IP;
-            ushort port = netSendObject.PeerParams.Port;
+            string ip = actionSendObject.PeerParams.IP;
+            ushort port = actionSendObject.PeerParams.Port;
 
             // Verify port is within valid range (outbound connections can only ever be to servers).
             if (port < ServerPortMin && port >= ClientPortMin)
@@ -302,10 +331,10 @@ namespace ENetServer.Network
                 }
             }
 
-            // Create Address object with IP and Port from NetSendObject.
+            // Create Address object with IP and Port from ActionSendObject.
             Address remoteAddress = new();
-            remoteAddress.SetIP(netSendObject.PeerParams.IP);
-            remoteAddress.Port = netSendObject.PeerParams.Port;
+            remoteAddress.SetIP(actionSendObject.PeerParams.IP);
+            remoteAddress.Port = actionSendObject.PeerParams.Port;
 
             // Queue connect to remote address.
             try
@@ -313,6 +342,7 @@ namespace ENetServer.Network
                 Peer? pendingPeer = serverHost?.Connect(remoteAddress);
                 if (pendingPeer != null)
                 {
+                    // If connect attempt did not fail, set lower timeout value and add to AllPeers.
                     pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
                     AllPeers.Add(pendingPeer.Value);
                 }
@@ -326,11 +356,11 @@ namespace ENetServer.Network
         /// <summary>
         /// Queues disconnect request for one remote host to be sent next tick.
         /// </summary>
-        /// <param name="netSendObject">  </param>
-        internal void QueueDisconnectOne(NetSendObject netSendObject)
+        /// <param name="actionSendObject">  </param>
+        internal void QueueDisconnectOne(ActionSendObject actionSendObject)
         {
             // Only if a peer with this ID is found.
-            if (Connections.TryGetValue(netSendObject.PeerParams.ID, out PeerConnection? peerConnection))
+            if (Connections.TryGetValue(actionSendObject.PeerParams.ID, out PeerConnection? peerConnection))
             {
                 // Verify that the peer is valid.
                 Peer peer = peerConnection.Peer;
@@ -342,13 +372,13 @@ namespace ENetServer.Network
         }
 
         /// <summary>
-        /// Queues disconnect requests to all remote hosts with IDs contained in the NetSendObject.
+        /// Queues disconnect requests to all remote hosts with IDs contained in the ActionSendObject.
         /// </summary>
-        /// <param name="netSendObject">  </param>
-        internal void QueueDisconnectMany(NetSendObject netSendObject)
+        /// <param name="actionSendObject">  </param>
+        internal void QueueDisconnectMany(ActionSendObject actionSendObject)
         {
             // Iterate over IDArray and try to disconnect any valid Connection with the ID.
-            foreach (var id in netSendObject.PeerParams.IDArray)
+            foreach (var id in actionSendObject.PeerParams.IDArray)
             {
                 // Only if a peer with this ID is found.
                 if (Connections.TryGetValue(id, out PeerConnection? peerConnection))
@@ -365,12 +395,12 @@ namespace ENetServer.Network
 
         /// <summary>
         /// Queues disconnect requests to be sent to all connected remote hosts matching
-        ///  the HostType contained in the NetSendObject.
+        ///  the HostType contained in the ActionSendObject.
         /// </summary>
-        /// <param name="netSendObject">  </param>
-        internal void QueueDisconnectAll(NetSendObject netSendObject)
+        /// <param name="actionSendObject">  </param>
+        internal void QueueDisconnectAll(ActionSendObject actionSendObject)
         {
-            HostType hostType = netSendObject.PeerParams.HostType;
+            HostType hostType = actionSendObject.PeerParams.HostType;
 
             // If HostType is both, do not do any filtering.
             if (hostType == HostType.Both)
@@ -388,7 +418,7 @@ namespace ENetServer.Network
             // Else if HostType is exclusively one or the other, filter each Connection.
             else if (hostType == HostType.Server || hostType == HostType.Client)
             {
-                bool isServer = (netSendObject.PeerParams.HostType != HostType.Server);
+                bool isServer = (actionSendObject.PeerParams.HostType != HostType.Server);
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers.
@@ -408,15 +438,15 @@ namespace ENetServer.Network
         /// <summary>
         /// Sends a packet to a single peer.
         /// </summary>
-        /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
-        internal void QueueMessageOne(NetSendObject netSendObject)
+        /// <param name="messageSendObject"> MessageSendObject containing relevant peer and payload data. </param>        
+        internal void QueueMessageOne(MessageSendObject messageSendObject)
         {
             // Create packet from passed-in byte[], which is already in ready-to-send format.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(messageSendObject.Bytes);
 
             // Only if a peer with this ID is found.
-            if (Connections.TryGetValue(netSendObject.PeerParams.ID, out PeerConnection? peerConnection))
+            if (Connections.TryGetValue(messageSendObject.PeerParams.ID, out PeerConnection? peerConnection))
             {
                 // Verify that the peer is valid.
                 Peer peer = peerConnection.Peer;
@@ -428,17 +458,17 @@ namespace ENetServer.Network
         }
 
         /// <summary>
-        /// Queues messages to be sent to all remote hosts with IDs contained in the NetSendObject.
+        /// Queues messages to be sent to all remote hosts with IDs contained in the MessageSendObject.
         /// </summary>
-        /// <param name="netSendObject">  </param>
-        internal void QueueMessageMany(NetSendObject netSendObject)
+        /// <param name="messageSendObject">  </param>
+        internal void QueueMessageMany(MessageSendObject messageSendObject)
         {
             // Create packet from passed-in byte[], which is already in ready-to-send format.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(messageSendObject.Bytes);
 
             // Iterate over IDArray and try to message any valid Connection with the ID.
-            foreach (var id in netSendObject.PeerParams.IDArray)
+            foreach (var id in messageSendObject.PeerParams.IDArray)
             {
                 // Only if a peer with this ID is found.
                 if (Connections.TryGetValue(id, out PeerConnection? peerConnection))
@@ -456,14 +486,14 @@ namespace ENetServer.Network
         /// <summary>
         /// Sends a packet to all connected peers.
         /// </summary>
-        /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
-        internal void QueueMessageAll(NetSendObject netSendObject)
+        /// <param name="messageSendObject"> MessageSendObject containing relevant peer and payload data. </param>        
+        internal void QueueMessageAll(MessageSendObject messageSendObject)
         {
             // Create packet from passed-in byte[], which is already in ready-to-send format.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(messageSendObject.Bytes);
 
-            HostType hostType = netSendObject.PeerParams.HostType;
+            HostType hostType = messageSendObject.PeerParams.HostType;
 
             // If HostType is both, do not do any filtering.
             if (hostType == HostType.Both)
@@ -481,7 +511,7 @@ namespace ENetServer.Network
             // Else if HostType is exclusively one or the other, filter each Connection.
             else if (hostType == HostType.Server || hostType == HostType.Client)
             {
-                bool isServer = (netSendObject.PeerParams.HostType == HostType.Server);
+                bool isServer = (messageSendObject.PeerParams.HostType == HostType.Server);
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers.
@@ -499,14 +529,14 @@ namespace ENetServer.Network
         /// <summary>
         /// Sends a packet to all connected peers except one.
         /// </summary>
-        /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
-        internal void QueueMessageAllExcept(NetSendObject netSendObject)
+        /// <param name="messageSendObject"> MessageSendObject containing relevant peer and payload data. </param>        
+        internal void QueueMessageAllExcept(MessageSendObject messageSendObject)
         {
             // Create packet from passed-in byte[], which is already in ready-to-send format.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(messageSendObject.Bytes);
 
-            HostType hostType = netSendObject.PeerParams.HostType;
+            HostType hostType = messageSendObject.PeerParams.HostType;
 
             // If HostType is both, do not do any filtering.
             if (hostType == HostType.Both)
@@ -514,7 +544,7 @@ namespace ENetServer.Network
                 foreach (var peerConnection in Connections)
                 {
                     // Skipped passed-in peer ID.
-                    if (peerConnection.Key == netSendObject.PeerParams.ID) continue;
+                    if (peerConnection.Key == messageSendObject.PeerParams.ID) continue;
 
                     // Verify that the peer is valid.
                     Peer peer = peerConnection.Value.Peer;
@@ -527,12 +557,12 @@ namespace ENetServer.Network
             // Else if HostType is exclusively one or the other, filter each Connection.
             else if (hostType == HostType.Server || hostType == HostType.Client)
             {
-                bool isServer = (netSendObject.PeerParams.HostType == HostType.Server);
+                bool isServer = (messageSendObject.PeerParams.HostType == HostType.Server);
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers AND passed-in peer ID.
                     if (peerConnection.Value.Connection.IsServer != isServer) continue;
-                    if (peerConnection.Key == netSendObject.PeerParams.ID) continue;
+                    if (peerConnection.Key == messageSendObject.PeerParams.ID) continue;
 
                     Peer peer = peerConnection.Value.Peer;
                     if (peer.State != PeerState.Connected) continue;
@@ -558,9 +588,10 @@ namespace ENetServer.Network
 
             AllPeers.Add(connectEvent.Peer);
 
-            // Enqueue connect object with new peer's Connection for use by other threads.
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(peerConnection.Connection);
-            netRecvQueue.Enqueue(dataObject);
+            // Enqueue connect object with new peer's Connection for use by game thread.
+            ActionRecvObject actionRecvObject = ActionRecvObject.Factory.CreateFromConnect(
+                peerConnection.Connection);
+            netToGameQueue.Enqueue(actionRecvObject);
         }
 
         private void HandleDisconnectEvent(ref Event disconnectEvent)
@@ -568,9 +599,10 @@ namespace ENetServer.Network
             // Remove PeerConnection from map and enqueue Connection if successful.
             if (Connections.Remove(disconnectEvent.Peer.ID, out PeerConnection? peerConnection))
             {
-                // Enqueue disconnect object with disconnected peer's Connection for use by other threads.
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(peerConnection.Connection);
-                netRecvQueue.Enqueue(dataObject);
+                // Enqueue disconnect object with disconnected peer's Connection for use by game thread.
+                ActionRecvObject actionRecvObject = ActionRecvObject.Factory.CreateFromDisconnect(
+                    peerConnection.Connection);
+                netToGameQueue.Enqueue(actionRecvObject);
             }
         }
 
@@ -579,9 +611,10 @@ namespace ENetServer.Network
             // Remove PeerConnection from map and enqueue Connection if successful.
             if (Connections.Remove(timeoutEvent.Peer.ID, out PeerConnection? peerConnection))
             {
-                // Enqueue timeout object with timed-out peer's Connection for use by other threads.
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(peerConnection.Connection);
-                netRecvQueue.Enqueue(dataObject);
+                // Enqueue timeout object with timed-out peer's Connection for use by game thread.
+                ActionRecvObject actionRecvObject = ActionRecvObject.Factory.CreateFromTimeout(
+                    peerConnection.Connection);
+                netToGameQueue.Enqueue(actionRecvObject);
             }
         }
 
@@ -594,9 +627,10 @@ namespace ENetServer.Network
             // Get PeerConnection from map and enqueue Connection if successful.
             if (Connections.TryGetValue(receiveEvent.Peer.ID, out PeerConnection? peerConnection))
             {
-                // Enqueue NetRecvObject with this peer's Connection.
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerConnection.Connection, bytes);
-                netRecvQueue.Enqueue(dataObject);
+                // Enqueue MessageRecvObject with this peer's Connection and the byte[] payload.
+                MessageRecvObject messageRecvObject = MessageRecvObject.Factory.CreateFromMessage(
+                    peerConnection.Connection, bytes);
+                netToSerializeQueue.Enqueue(messageRecvObject);
             }
 
             // Always dispose packet after handling receive, even if did not enqueue NetRecvObject.

@@ -26,7 +26,7 @@ namespace ENetServer
         // The main thread needs only to call the SetupAsClient()/SetupAsServer(), StartThreadedOperations(),
         //  and StopThreadedOperations() methods to manage this class. These methods fully encapsulate all
         //  networking operations.
-        // Utilizing the NetworkManager only requires using EnqueueGameSendObject(), DequeueGameRecvObject(),
+        // Utilizing the NetworkManager only requires using EnqueueMessageForSend(), DequeueMessageFromRecv(),
         //  and GetConnectedClient() (server only) to work with outgoing/incoming network data and with
         //  connected clients. The main/game thread can focus on working with the game data passed to /
         //  received from this class rather than handling the actual networking tasks (focus on gameplay and
@@ -55,13 +55,15 @@ namespace ENetServer
 
 
 
-        // Thread-safe queues for communicating game data between main and serialization/intermediate threads.
-        private ConcurrentQueue<GameSendObject> GameSendQueue { get; } = new();
-        private ConcurrentQueue<GameRecvObject> GameRecvQueue { get; } = new();
+        // Thread-safe queues for message objects (which pass through the Serializer).
+        private ConcurrentQueue<MessageSendObject> GameToSerializeQueue { get; } = new();
+        private ConcurrentQueue<MessageSendObject> SerializeToNetQueue { get; } = new();
+        private ConcurrentQueue<MessageRecvObject> NetToSerializeQueue { get; } = new();
+        private ConcurrentQueue<MessageRecvObject> SerializeToGameQueue { get; } = new();
 
-        // Thread-safe queues for communicating network data between network and serialization/intermediate threads.
-        private ConcurrentQueue<NetSendObject> NetSendQueue { get; } = new();
-        private ConcurrentQueue<NetRecvObject> NetRecvQueue { get; } = new();
+        // Thread-safe queues for non-message objects (which skip Serializer completely).
+        private ConcurrentQueue<ActionSendObject> GameToNetQueue { get; } = new();
+        private ConcurrentQueue<ActionRecvObject> NetToGameQueue { get; } = new();
 
         // Publicly accessible, these are readonly (in practice) so thread-safe.
         public bool IsServer { get; private set; }
@@ -175,16 +177,60 @@ namespace ENetServer
 
 
 
-        public void EnqueueGameSendObject(GameSendObject gameSendObject)
+        #region Action enqueue/dequeue methods
+
+        public void EnqueueActionForSend(ActionSendObject actionSendObject)
         {
-            // Queues the passed-in GameSendObject to be processed and sent.
-            GameSendQueue.Enqueue(gameSendObject);
+            // Queues the passed-in ActionSendObject to be handled by ENet.
+            GameToNetQueue.Enqueue(actionSendObject);
+
+            //Console.WriteLine("EnqueueActionForSend called.");
         }
 
-        public GameRecvObject? DequeueGameRecvObject()
+        public ActionRecvObject? DequeueActionFromRecv()
         {
             // Try to dequeue one, returning the result if successful or null if failed.
-            return GameRecvQueue.TryDequeue(out GameRecvObject? result) ? result : null;
+            return NetToGameQueue.TryDequeue(out ActionRecvObject? result) ? result : null;
+        }
+
+        /// <summary>
+        /// Dequeues all ActionRecvObjects in the queue at the instant this is called and returns
+        ///  as an array. Any objects enqueued during this method's execution will not be dequeued.
+        /// </summary>
+        /// <returns> The array of ActionRecvObjects pulled from the queue. </returns>
+        public ActionRecvObject?[] DequeueAllActionsFromRecv()
+        {
+            // Store current number of items in the queue, then create an array of exactly this size.
+            int count = NetToGameQueue.Count;
+            ActionRecvObject?[] tempArray = new ActionRecvObject[count];
+
+            // Dequeue and add to array the stored number of queued items. Will ignore any items
+            //  added to the queue while this method is executing (prevents potential infinite block).
+            for (int i = 0; i < count; i++)
+            {
+                NetToGameQueue.TryDequeue(out ActionRecvObject? actionRecvObject);
+                tempArray[i] = actionRecvObject;
+            }
+
+            return tempArray;
+        }
+
+        #endregion
+
+        #region Message enqueue/dequeue methods
+
+        public void EnqueueMessageForSend(MessageSendObject messageSendObject)
+        {
+            // Queues the passed-in MessageSendObject to be processed and sent.
+            GameToSerializeQueue.Enqueue(messageSendObject);
+
+            //Console.WriteLine("EnqueueMessageForSend called.");
+        }
+
+        public MessageRecvObject? DequeueMessageFromRecv()
+        {
+            // Try to dequeue one, returning the result if successful or null if failed.
+            return SerializeToGameQueue.TryDequeue(out MessageRecvObject? result) ? result : null;
         }
 
         /// <summary>
@@ -192,22 +238,24 @@ namespace ENetServer
         ///  as an array. Any objects enqueued during this method's execution will not be dequeued.
         /// </summary>
         /// <returns> The array of GameRecvObjects pulled from the queue. </returns>
-        public GameRecvObject?[] DequeueAllGameRecvObjects()
+        public MessageRecvObject?[] DequeueAllMessagesFromRecv()
         {
             // Store current number of items in the queue, then create an array of exactly this size.
-            int count = GameRecvQueue.Count;
-            GameRecvObject?[] tempArray = new GameRecvObject[count];
+            int count = SerializeToGameQueue.Count;
+            MessageRecvObject?[] tempArray = new MessageRecvObject[count];
 
             // Dequeue and add to array the stored number of queued items. Will ignore any items
             //  added to the queue while this method is executing (prevents potential infinite block).
             for (int i = 0; i < count; i++)
             {
-                GameRecvQueue.TryDequeue(out GameRecvObject? gameRecvObject);
+                SerializeToGameQueue.TryDequeue(out MessageRecvObject? gameRecvObject);
                 tempArray[i] = gameRecvObject;
             }
 
             return tempArray;
         }
+
+        #endregion
 
 
 
@@ -230,8 +278,8 @@ namespace ENetServer
                 thread = new(Run);
 
                 // Startup serializer (but do not begin running).
-                serializer = new Serializer(Instance.GameSendQueue, Instance.NetSendQueue,
-                    Instance.GameRecvQueue, Instance.NetRecvQueue);
+                serializer = new Serializer(Instance.GameToSerializeQueue, Instance.SerializeToNetQueue,
+                    Instance.NetToSerializeQueue, Instance.SerializeToGameQueue);
             }
 
 
@@ -267,10 +315,10 @@ namespace ENetServer
                 while (!shouldExit)
                 {
                     // Reads from game out queue, serializes, adds to network send queue.
-                    serializer.DoGameToNetTasks();
+                    serializer.DoSerializeTasks();
 
                     // Reads from network receive queue, deserializes, adds to game in queue.
-                    serializer.DoNetToGameTasks();
+                    serializer.DoDeserializeTasks();
                 }
             }
         }
@@ -290,7 +338,8 @@ namespace ENetServer
                 thread = new(Run);
 
                 // INITIALIZE ENET SERVER, BUT DO NOT CREATE SERVER YET.
-                server = new Server(Instance.NetSendQueue, Instance.NetRecvQueue);
+                server = new Server(Instance.GameToNetQueue, Instance.NetToGameQueue,
+                    Instance.SerializeToNetQueue, Instance.NetToSerializeQueue);
                 server.SetHostParameters("127.0.0.1", port, 64, 2);
             }
 
@@ -331,10 +380,10 @@ namespace ENetServer
                 while (!shouldExit)
                 {
                     // Reads from network send queue, then queues ENet operations.
-                    server.DoNetSendTasks();
+                    server.DoSendTasks();
 
                     // Handles ENet events, runs host service, and adds to network receive queue.
-                    server.DoNetReceiveTasks();
+                    server.DoReceiveTasks();
                 }
 
                 // Stop server, waiting at least 3 seconds for all clients to be disconnected properly.
@@ -357,7 +406,8 @@ namespace ENetServer
                 thread = new(Run);
 
                 // INITIALIZE ENET CLIENT, BUT DO NOT CREATE HOST YET.
-                client = new Client(Instance.NetSendQueue, Instance.NetRecvQueue);
+                client = new Client(Instance.GameToNetQueue, Instance.NetToGameQueue,
+                    Instance.SerializeToNetQueue, Instance.NetToSerializeQueue);
                 client.SetHostParameters("127.0.0.1", port, 64, 2);
             }
 
@@ -398,10 +448,10 @@ namespace ENetServer
                 while (!shouldExit)
                 {
                     // Reads from network send queue, then queues ENet operations.
-                    client.DoNetSendTasks();
+                    client.DoSendTasks();
 
                     // Handles ENet events, runs host service, and adds to network receive queue.
-                    client.DoNetReceiveTasks();
+                    client.DoReceiveTasks();
                 }
 
                 // Stop client, waiting at least 3 seconds to successfully disconnect from remote host.

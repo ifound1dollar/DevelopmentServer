@@ -172,8 +172,8 @@ namespace ServerExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            ActionSendObject actionSendObject = ActionSendObject.Factory.CreateConnectOne(ip, port);
+            NetworkManager.Instance.EnqueueActionForSend(actionSendObject);
         }
 
         /// <summary>
@@ -183,8 +183,8 @@ namespace ServerExample
         {
             Console.WriteLine("[ACTION] Disconnecting all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            ActionSendObject actionSendObject = ActionSendObject.Factory.CreateDisconnectAll(HostType.Both);
+            NetworkManager.Instance.EnqueueActionForSend(actionSendObject);
         }
 
         /// <summary>
@@ -202,8 +202,8 @@ namespace ServerExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            MessageSendObject messageSendObject = MessageSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
+            NetworkManager.Instance.EnqueueMessageForSend(messageSendObject);
         }
 
         /// <summary>
@@ -227,8 +227,8 @@ namespace ServerExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            MessageSendObject messageSendObject = MessageSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
+            NetworkManager.Instance.EnqueueMessageForSend(messageSendObject);
         }
 
         /// <summary>
@@ -284,8 +284,8 @@ namespace ServerExample
 
                     if (gameDataObject != null)
                     {
-                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(sendCounter, gameDataObject);
-                        NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+                        MessageSendObject messageSendObject = MessageSendObject.Factory.CreateTestSend(sendCounter, gameDataObject);
+                        NetworkManager.Instance.EnqueueMessageForSend(messageSendObject);
                         sendCounter++;
 
                         if (sendCounter >= numObjects)
@@ -300,7 +300,7 @@ namespace ServerExample
                 {
                     // Using this while loop ensures that execution waits until the just-enqueued
                     //  GameSendObject returns as a GameRecvObject (keeps queues minimum size).
-                    //while (NetworkManager.Instance.DequeueGameRecvObject() == null)
+                    //while (NetworkManager.Instance.DequeueMessageFromRecv() == null)
                     //{
 
                     //}
@@ -310,7 +310,7 @@ namespace ServerExample
                     //  dequeue. Enqueuing operations are executed faster, and this method works
                     //  as a means of seeing exactly how long it takes in total to complete
                     //  receive operations that do not cause send operations to wait.
-                    if (NetworkManager.Instance.DequeueGameRecvObject() != null)
+                    if (NetworkManager.Instance.DequeueMessageFromRecv() != null)
                     {
                         recvCounter++;
                     }
