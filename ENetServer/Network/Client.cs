@@ -78,7 +78,10 @@ namespace ENetServer.Network
             // Create the client host with address, defined peer limit, defined channel limit, no bandwidth limit.
             clientHost = new();
             clientHost.Create(address, peerLimit, channelLimit, 0u, 0u, 1024*1024);
-            clientHost.PreventConnections(true);    //TODO: VERIFY THAT THIS DOES NOT STOP CONNECTING TO OTHERS
+
+            // Prevent incoming connections (only outgoing connections allowed on clients).
+            // Also disables connecting to another client.
+            clientHost.PreventConnections(true);
         }
 
         /// <summary>
@@ -281,7 +284,12 @@ namespace ENetServer.Network
             ushort port = netSendObject.PeerParams.Port;
 
             // Verify port is within valid range (outbound connections can only ever be to servers).
-            if (port < ServerPortMin && port >= ClientPortMin) return;
+            if (port < ServerPortMin && port >= ClientPortMin)
+            {
+                Console.WriteLine("[ERROR] Specified port out of range for new Connect attempt. Valid range: {0}-{1}",
+                    ServerPortMin, ClientPortMin - 1);
+                return;
+            }
 
             // Verify not trying to connect to a Host already connected to.
             foreach (var peerConnection in Connections)

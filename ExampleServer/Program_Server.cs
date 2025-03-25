@@ -82,6 +82,16 @@ namespace ServerExample
                     {
                         ServerSendTransformToAll(uint.MaxValue, -6546515611561564564, 2, 3);
                     }
+                    else if (inputSplit.Length > 0 && inputSplit[0] == "connect")
+                    {
+                        if (inputSplit.Length < 2) continue;
+
+                        if (ushort.TryParse(inputSplit[1], out ushort port))
+                        {
+                            if ((validPort && port == argPort)) continue;   // Prevent connection to self.
+                            ServerConnectToHost("127.0.0.1", port);
+                        }
+                    }
                     else if (inputLower == "gc")
                     {
                         ForceGarbageCollection();
@@ -141,6 +151,30 @@ namespace ServerExample
         }
 
 
+
+        /// <summary>
+        /// Instructs the server to attempt to connect to a remote host at the specified IP and port.
+        /// </summary>
+        /// <param name="ip"> IP address of host to connect to. </param>
+        /// <param name="port"> Port of host to connect to. </param>
+        public static void ServerConnectToHost(string ip, ushort port)
+        {
+            Console.WriteLine("[ACTION] Attempting to connect to remote host at {0}:{1}...", ip, port);
+
+            // First, verify that we are not already connected to a host with this information.
+            var temp = GameSimulator.Connections.ToArray();
+            foreach (var host in temp)
+            {
+                if (host.Value.IP == ip && host.Value.Port == port)
+                {
+                    Console.WriteLine("[ERROR] Already connected to a host at {0}:{1}. Aborting.", ip, port);
+                    return;
+                }
+            }
+
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port);
+            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+        }
 
         /// <summary>
         /// Instructs the server to disconnect all connected clients on next Tick.

@@ -285,7 +285,12 @@ namespace ENetServer.Network
             ushort port = netSendObject.PeerParams.Port;
 
             // Verify port is within valid range (outbound connections can only ever be to servers).
-            if (port < ServerPortMin && port >= ClientPortMin) return;
+            if (port < ServerPortMin && port >= ClientPortMin)
+            {
+                Console.WriteLine("[ERROR] Specified port out of range for new Connect attempt. Valid range: {0}-{1}",
+                    ServerPortMin, ClientPortMin - 1);
+                return;
+            }
 
             // Verify not trying to connect to a Host already connected to.
             foreach (var peerConnection in Connections)
@@ -383,7 +388,7 @@ namespace ENetServer.Network
             // Else if HostType is exclusively one or the other, filter each Connection.
             else if (hostType == HostType.Server || hostType == HostType.Client)
             {
-                bool isServer = (netSendObject.PeerParams.HostType == HostType.Server);
+                bool isServer = (netSendObject.PeerParams.HostType != HostType.Server);
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers.
@@ -480,7 +485,7 @@ namespace ENetServer.Network
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers.
-                    if (peerConnection.Value.Connection.IsServer == isServer) continue;
+                    if (peerConnection.Value.Connection.IsServer != isServer) continue;
 
                     Peer peer = peerConnection.Value.Peer;
                     if (peer.State != PeerState.Connected) continue;
@@ -526,7 +531,7 @@ namespace ENetServer.Network
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers AND passed-in peer ID.
-                    if (peerConnection.Value.Connection.IsServer == isServer) continue;
+                    if (peerConnection.Value.Connection.IsServer != isServer) continue;
                     if (peerConnection.Key == netSendObject.PeerParams.ID) continue;
 
                     Peer peer = peerConnection.Value.Peer;
