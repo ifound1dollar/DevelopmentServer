@@ -134,8 +134,13 @@ namespace ENetServer.Network
         /// </summary>
         internal void DoNetSendTasks()
         {
-            // Loop until network send queue is empty.
-            while (!netSendQueue.IsEmpty)
+            // Store number of elements when this method is initially called, then dequeue that many.
+            // This will prevent an infinite loop that could be encountered if items were being added
+            //  to the queue as fast or faster than they were processed, which would cause the thread
+            //  to get stuck dequeuing and never run ENet events.
+
+            int queueCount = netSendQueue.Count;
+            for (int i = 0; i < queueCount; i++)
             {
                 // Try to dequeue item from serializeQueue, operating on the item if successful.
                 if (!netSendQueue.TryDequeue(out NetSendObject? netSendObject)) break;
@@ -392,7 +397,7 @@ namespace ENetServer.Network
                 foreach (var peerConnection in Connections)
                 {
                     // Skip wrong HostType peers.
-                    if (peerConnection.Value.Connection.IsServer == isServer) continue;
+                    if (peerConnection.Value.Connection.IsServer != isServer) continue;
 
                     Peer peer = peerConnection.Value.Peer;
                     if (peer.State != PeerState.Connected) continue;

@@ -103,8 +103,8 @@ namespace ENetServer.Network
         /// <summary>
         /// Disconnects all Connections, then runs ENet service for 3 seconds to wait for ACKs (blocks).
         /// </summary>
-        /// <param name="serverHost"> Non-null Host used only to silence warning. </param>
-        private void DisconnectAllOnStop(Host serverHost)
+        /// <param name="clientHost"> Non-null Host used only to silence warning. </param>
+        private void DisconnectAllOnStop(Host clientHost)
         {
             // Disconnect all peers before disposing server (graceful disconnects).
             foreach (var peerConnection in Connections)
@@ -118,7 +118,7 @@ namespace ENetServer.Network
             }
 
             // Wait 3 seconds for clients to respond to disconnect request.
-            while (serverHost.Service(3000, out Event netEvent) > 0)
+            while (clientHost.Service(3000, out Event netEvent) > 0)
             {
                 switch (netEvent.Type)
                 {
@@ -139,8 +139,13 @@ namespace ENetServer.Network
         /// </summary>
         internal void DoNetSendTasks()
         {
-            // Loop until network send queue is empty.
-            while (!netSendQueue.IsEmpty)
+            // Store number of elements when this method is initially called, then dequeue that many.
+            // This will prevent an infinite loop that could be encountered if items were being added
+            //  to the queue as fast or faster than they were processed, which would cause the thread
+            //  to get stuck dequeuing and never run ENet events.
+
+            int queueCount = netSendQueue.Count;
+            for (int i = 0; i < queueCount; i++)
             {
                 // Try to dequeue item from serializeQueue, operating on the item if successful.
                 if (!netSendQueue.TryDequeue(out NetSendObject? netSendObject)) break;
