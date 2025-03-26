@@ -57,56 +57,35 @@ namespace ENetServer.Serialize
                 switch (gameSendObject.SendType)
                 {
                     case SendType.Connect_One:
-                        {
-                            SendConnectOne(gameSendObject);
-                            break;
-                        }
                     case SendType.Disconnect_One:
-                        {
-                            SendDisconnectOne(gameSendObject);
-                            break;
-                        }
                     case SendType.Disconnect_Many:
-                        {
-                            SendDisconnectMany(gameSendObject);
-                            break;
-                        }
                     case SendType.Disconnect_All:
                         {
-                            SendDisconnectAll(gameSendObject);
+                            // Simply pass incoming non-message object to network thread to be handled there.
+                            NetSendObject netSendObject = new(gameSendObject.SendType, gameSendObject.PeerParams);
+                            netSendQueue.Enqueue(netSendObject);
+
                             break;
                         }
                     case SendType.Message_One:
-                        {
-                            SendMessageOne(gameSendObject);
-                            break;
-                        }
                     case SendType.Message_Many:
-                        {
-                            SendMessageMany(gameSendObject);
-                            break;
-                        }
                     case SendType.Message_All:
-                        {
-                            SendMessageAll(gameSendObject);
-                            break;
-                        }
                     case SendType.Message_AllExcept:
-                        {
-                            SendMessageAllExcept(gameSendObject);
-                            break;
-                        }
                     case SendType.TestSend:
                         {
-                            // TODO: REMOVE THIS TEST CASE
-                            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameSendObject.GameDataObject);
-                            if (bytes != null)
+                            // Attempt to serialize GameDataObject into byte[].
+                            if (GameDataObject.SerializeGameDataObject(gameSendObject.GameDataObject, out byte[]? bytes))
                             {
-                                NetSendObject netSendObject = NetSendObject.Factory.CreateTestSend(
-                                    gameSendObject.PeerParams, bytes);
+                                // If serialization successful, create GameRecvObject and enqueue to net.
+                                NetSendObject netSendObject = new(gameSendObject.SendType, gameSendObject.PeerParams, bytes);
                                 netSendQueue.Enqueue(netSendObject);
                             }
-                            
+                            else
+                            {
+                                // Else unsuccessful, so log error and do not enqueue.
+                                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                            }
+
                             break;
                         }
                     // DO NOTHING FOR DEFAULT CASE
@@ -130,41 +109,38 @@ namespace ENetServer.Serialize
             for (int i = 0; i < queueCount; i++)
             {
                 // Try to dequeue item from netRecvQueue, operating on the item if successful.
-                if (!netRecvQueue.TryDequeue(out NetRecvObject? netReceiveObject)) break;
+                if (!netRecvQueue.TryDequeue(out NetRecvObject? netRecvObject)) break;
 
                 // Operate based on receive type.
-                switch (netReceiveObject.RecvType)
+                switch (netRecvObject.RecvType)
                 {
                     case RecvType.Connect:
-                        {
-                            ReceiveConnect(netReceiveObject);
-                            break;
-                        }
                     case RecvType.Disconnect:
-                        {
-                            ReceiveDisconnect(netReceiveObject);
-                            break;
-                        }
                     case RecvType.Timeout:
                         {
-                            ReceiveTimeout(netReceiveObject);
+                            // Simply pass incoming non-message object to main/game thread to be handled there.
+                            GameRecvObject gameRecvObject = new(netRecvObject.RecvType, netRecvObject.Connection);
+                            gameRecvQueue.Enqueue(gameRecvObject);
+
                             break;
                         }
                     case RecvType.Message:
-                        {
-                            ReceiveMessage(netReceiveObject);
-                            break;
-                        }
                     case RecvType.TestRecv:
                         {
-                            // TODO: REMOVE THIS TEST CASE
-                            GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(netReceiveObject.Bytes);
-                            if (gameDataObject != null)
+                            // Attempt to deserialize received byte[] into GameDataObject.
+                            if (GameDataObject.DeserializeGameDataObject(netRecvObject.Bytes, out GameDataObject? gameDataObject))
                             {
-                                GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromTestRecv(
-                                    netReceiveObject.Connection, gameDataObject);
+                                // If deserialization successful, create GameRecvObject and enqueue to game.
+                                GameRecvObject gameRecvObject = new(netRecvObject.RecvType, netRecvObject.Connection, gameDataObject);
                                 gameRecvQueue.Enqueue(gameRecvObject);
                             }
+                            else
+                            {
+                                // Else unsuccessful, so log error and do not enqueue.
+                                Console.WriteLine("[SERIALIZER_ERROR] Failed to deserialize data received from peer ID {0}. Discarding.",
+                                    netRecvObject.Connection.ID);
+                            }
+
                             break;
                         }
                     // DO NOTHING FOR DEFAULT CASE
@@ -173,133 +149,6 @@ namespace ENetServer.Serialize
                 /* - outside of switch case, inside while loop - */
             }
         }
-
-
-
-        #region Send Methods
-
-        private void SendConnectOne(GameSendObject gameObject)
-        {
-            NetSendObject netSendObject = NetSendObject.Factory.CreateConnectOne(gameObject.PeerParams);
-            netSendQueue.Enqueue(netSendObject);
-        }
-
-        private void SendDisconnectOne(GameSendObject gameObject)
-        {
-            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectOne(gameObject.PeerParams);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        private void SendDisconnectMany(GameSendObject gameObject)
-        {
-            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectMany(gameObject.PeerParams);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        private void SendDisconnectAll(GameSendObject gameObject)
-        {
-            NetSendObject dataObject = NetSendObject.Factory.CreateDisconnectAll(gameObject.PeerParams);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        private void SendMessageOne(GameSendObject gameObject)
-        {
-            // Serialize GameOutObject data and return as byte[].
-            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
-            if (bytes == null)
-            {
-                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
-                return;
-            }
-
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageOne(gameObject.PeerParams, bytes);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        private void SendMessageMany(GameSendObject gameObject)
-        {
-            // Serialize GameOutObject data and return as byte[].
-            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
-            if (bytes == null)
-            {
-                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
-                return;
-            }
-
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageMany(gameObject.PeerParams, bytes);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        private void SendMessageAll(GameSendObject gameObject)
-        {
-            // Serialize GameOutObject data and return as byte[].
-            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
-            if (bytes == null)
-            {
-                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
-                return;
-            }
-
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageAll(gameObject.PeerParams, bytes);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        private void SendMessageAllExcept(GameSendObject gameObject)
-        {
-            // Serialize GameOutObject data and return as byte[]. If empty array, log failure and return.
-            byte[]? bytes = GameDataObject.SerializeGameDataObject(gameObject.GameDataObject);
-            if (bytes == null)
-            {
-                Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
-                return;
-            }
-
-            NetSendObject dataObject = NetSendObject.Factory.CreateMessageAllExcept(gameObject.PeerParams, bytes);
-            netSendQueue.Enqueue(dataObject);
-        }
-
-        #endregion
-
-        #region Receive Methods
-
-        private void ReceiveConnect(NetRecvObject recvObject)
-        {
-            // Simply pass incoming connect object to main/game thread to be handled there.
-            GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromConnect(recvObject.Connection);
-            gameRecvQueue.Enqueue(gameRecvObject);
-        }
-
-        private void ReceiveDisconnect(NetRecvObject recvObject)
-        {
-            // Simply pass incoming disconnect object to main/game thread to be handled there.
-            GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromDisconnect(recvObject.Connection);
-            gameRecvQueue.Enqueue(gameRecvObject);
-        }
-
-        private void ReceiveTimeout(NetRecvObject recvObject)
-        {
-            // Simply pass incoming timeout object to main/game thread to be handled there.
-            GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromTimeout(recvObject.Connection);
-            gameRecvQueue.Enqueue(gameRecvObject);
-        }
-
-        private void ReceiveMessage(NetRecvObject recvObject)
-        {
-            // Attempt to deserialize received byte[] into GameDataObject. Log error and return if failure.
-            GameDataObject? gameDataObject = GameDataObject.DeserializeGameDataObject(recvObject.Bytes);
-            if (gameDataObject == null)
-            {
-                Console.WriteLine("[SERIALIZER_ERROR] Failed to deserialize data received from peer ID {0}. Discarding.",
-                    recvObject.Connection.ID);
-                return;
-            }
-
-            // Create GameRecvObject after deserializing, then enqueue for game/main thread handling.
-            GameRecvObject gameRecvObject = GameRecvObject.Factory.CreateFromMessage(recvObject.Connection, gameDataObject);
-            gameRecvQueue.Enqueue(gameRecvObject);
-        }
-
-        #endregion
 
     }
 }

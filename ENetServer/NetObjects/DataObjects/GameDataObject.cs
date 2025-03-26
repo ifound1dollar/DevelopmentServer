@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -36,18 +37,21 @@ namespace ENetServer.NetObjects.DataObjects
 
 
         /// <summary>
-        /// Attempts to serialize the passed-in GameDataObject into a byte[]. User should
-        ///  verify success immediately after calling this method.
+        /// Attempts to serialize the passed-in GameDataObject into a byte[]. Returns whether successfully
+        ///  serialized.
         /// </summary>
-        /// <param name="dataObject"> The GameDataObject attempting to be serialized. May be null. </param>
-        /// <returns> The serialized GameDataObject as a byte[], or null if unsuccessful (null argument). </returns>
-        public static byte[]? SerializeGameDataObject(GameDataObject? dataObject)
+        /// <param name="gameDataObject"> The GameDataObject attempting to be serialized. May be null. </param>
+        /// <param name="bytes"> The byte[] of deserialized data, or null if unsuccessful. </param>
+        /// <returns> Whether the GameDataObject was successfully serialized. </returns>
+        public static bool SerializeGameDataObject(GameDataObject? gameDataObject, [NotNullWhen(true)] out byte[]? bytes)
         {
-            // Return null if argument GameDataObject is null.
-            if (dataObject == null) return null;
+            bytes = null;
 
-            // If argument GameDataObject is not null, serialize into byte[].
-            byte[] bytes = dataObject.Serialize();  // Will prepend DataType value byte within this method.
+            // If passed-in GameDataObject is null, return false with null byte[].
+            if (gameDataObject == null) return false;
+
+            // If argument GameDataObject is not null, serialize into byte[] and return.
+            bytes = gameDataObject.Serialize();  // Will prepend DataType value byte within this method.
 
             //foreach (byte b in bytes)
             //{
@@ -55,40 +59,44 @@ namespace ENetServer.NetObjects.DataObjects
             //}
             //Console.WriteLine();
 
-            // Return the GameDataObject serialized into a raw byte[].
-            return bytes;
+            return true;
         }
 
         /// <summary>
-        /// Attemps to deserialize a byte[] into a valid GameDataObject instance. User should
-        ///  verify success immediately after calling this method.
+        /// Attempts to serialize the passed-in GameDataObject into a byte[]. Returns whether successfully
+        ///  serialized.
         /// </summary>
-        /// <param name="bytes"> The byte[] attempting to be deserialized. </param>
-        /// <returns> The deserialized GameDataObject, or null if unsuccessful (malformed or null byte[]). </returns>
-        public static GameDataObject? DeserializeGameDataObject(byte[]? bytes)
+        /// <param name="bytes"> The byte[] of serialized data attempting to be deserialized. </param>
+        /// <param name="gameDataObject"> The GameDataObject deserialized from the byte[], or null if unsuccessful </param>
+        /// <returns> Whether the byte[] was successfully deserialized. </returns>
+        public static bool DeserializeGameDataObject(byte[]? bytes, [NotNullWhen(true)] out GameDataObject? gameDataObject)
         {
-            // Ensure argument byte[] is non-null, then directly cast first byte in byte[] to DataType.
-            if (bytes == null) return null;
+            gameDataObject = null;
+
+            // If passed-in byte[] is null, return false with null GameDataObject.
+            if (bytes == null) return false;
+
+            // Get first byte of data as DataType enum.
             DataType dataType = (DataType)bytes[0];
 
             // Switch on the DataType byte to determine which class' deserialization method to call.
-            GameDataObject? dataObject = null;
             switch (dataType)
             {
                 case DataType.Text:
                     {
-                        dataObject = TextDataObject.Factory.CreateFromDeserialize(bytes);
+                        gameDataObject = TextDataObject.Factory.CreateFromDeserialize(bytes);
                         break;
                     }
                 case DataType.Transform:
                     {
-                        dataObject = TransformDataObject.Factory.CreateFromDeserialize(bytes);
+                        gameDataObject = TransformDataObject.Factory.CreateFromDeserialize(bytes);
                         break;
                     }
+                // DataType.None or default cases are implicitly caught here, leaving GameDataObject null.
             }
 
-            // DataType.None or default cases are implicitly caught here - GameDataObject remains null.
-            return dataObject;
+            // Return whether GameDataObject is NOT null (not null meaning successful).
+            return gameDataObject != null;
         }
     }
 }
