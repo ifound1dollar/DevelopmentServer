@@ -42,8 +42,13 @@ namespace ENetServer.Serialize
         /// </summary>
         internal void DoGameToNetTasks()
         {
-            // Loop until queue is empty.
-            while (!gameSendQueue.IsEmpty)
+            // Store number of elements when this method is initially called, then dequeue that many.
+            // This will prevent an infinite loop that could be encountered if items were being added
+            //  to the queue as fast or faster than they were processed, which would cause the thread
+            //  to get stuck dequeuing and never run ENet events.
+
+            int queueCount = gameSendQueue.Count;
+            for (int i = 0; i < queueCount; i++)
             {
                 // Try to dequeue item from serializeQueue, operating on the item if successful.
                 if (!gameSendQueue.TryDequeue(out GameSendObject? gameSendObject)) break;
@@ -116,8 +121,13 @@ namespace ENetServer.Serialize
         /// </summary>
         internal void DoNetToGameTasks()
         {
-            // Loop until net receive queue is empty.
-            while (!netRecvQueue.IsEmpty)
+            // Store number of elements when this method is initially called, then dequeue that many.
+            // This will prevent an infinite loop that could be encountered if items were being added
+            //  to the queue as fast or faster than they were processed, which would cause the thread
+            //  to get stuck dequeuing and never run ENet events.
+
+            int queueCount = netRecvQueue.Count;
+            for (int i = 0; i < queueCount; i++)
             {
                 // Try to dequeue item from netRecvQueue, operating on the item if successful.
                 if (!netRecvQueue.TryDequeue(out NetRecvObject? netReceiveObject)) break;

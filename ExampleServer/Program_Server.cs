@@ -26,7 +26,8 @@ namespace ServerExample
                     validPort = ushort.TryParse(userInput, out argPort);
                     if (argPort < ServerPortMin)
                     {
-                        Console.WriteLine("Port number out of range, defaulting to 8888.");
+                        Console.WriteLine("Port number out of range, defaulting to {0}.",
+                            ServerPortMin);
                         argPort = ServerPortMin;
                     }
                 }
