@@ -11,19 +11,21 @@ using static ENetServer.NetStatics;
 namespace ENetServer.NetObjects
 {
     /// <summary>
-    /// Net object containing SERIALIZED network data JUST RECEIVED over the network.
-    ///  Use NetRecvObject.Factory to create objects.
+    /// NetObject for messages just received over the network. Use NetRecvObject.Factory to create objects.
     /// </summary>
-    internal class NetRecvObject
+    public class NetRecvObject
     {
-        internal RecvType RecvType { get; private set; }
-        internal Connection Connection { get; private set; }
-        internal byte[]? Bytes { get; private set; }
+        public RecvType RecvType { get; }
+        public Connection Connection { get; }
+        public bool IsDeserializable { get; }
+        public byte[]? Bytes { get; set; }
+        public GameDataObject? GameDataObject { get; set; }
 
         private NetRecvObject(RecvType recvType, Connection connection)
         {
             RecvType = recvType;
             Connection = connection;
+            IsDeserializable = false;
             // Bytes remains null.
         }
 
@@ -31,6 +33,7 @@ namespace ENetServer.NetObjects
         {
             RecvType = recvType;
             Connection = connection;
+            IsDeserializable = true;
             Bytes = bytes;
         }
 
@@ -40,7 +43,7 @@ namespace ENetServer.NetObjects
         /// Factory responsible for creating NetRecvObjects. Each creator method corresponds to
         ///  one RecvType.
         /// </summary>
-        internal static class Factory
+        public static class Factory
         {
             // NOTE: Each of the below Factory methods are almost identical (generally violating
             //  the DRY principle) and could reasonably be consolidated into two methods: those
@@ -57,7 +60,7 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just connected. </param>
             /// <returns> The newly created 'connect' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromConnect(Connection connection)
+            public static NetRecvObject CreateFromConnect(Connection connection)
             {
                 return new NetRecvObject(RecvType.Connect, connection);
             }
@@ -68,7 +71,7 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just disconnected. </param>
             /// <returns> The newly created 'disconnect' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromDisconnect(Connection connection)
+            public static NetRecvObject CreateFromDisconnect(Connection connection)
             {
                 return new NetRecvObject(RecvType.Disconnect, connection);
             }
@@ -79,7 +82,7 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that just timed out. </param>
             /// <returns> The newly created 'timeout' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromTimeout(Connection connection)
+            public static NetRecvObject CreateFromTimeout(Connection connection)
             {
                 return new NetRecvObject(RecvType.Timeout, connection);
             }
@@ -91,7 +94,7 @@ namespace ENetServer.NetObjects
             /// <param name="connection"> Connection object corresponding to peer that message was received from. </param>
             /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
             /// <returns> The newly created 'message' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes)
+            public static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes)
             {
                 return new NetRecvObject(RecvType.Message, connection, bytes);
             }
@@ -105,7 +108,7 @@ namespace ENetServer.NetObjects
             /// <param name="connection"> TEST Connection to simulate message receive overhead. </param>
             /// <param name="bytes"> TEST byte[] to simulate message receive overhead. </param>
             /// <returns> The newly created TEST GameRecvObject. </returns>
-            internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes)
+            public static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes)
             {
                 return new NetRecvObject(RecvType.TestRecv, connection, bytes);
             }

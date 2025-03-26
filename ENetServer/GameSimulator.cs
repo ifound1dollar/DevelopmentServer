@@ -144,14 +144,14 @@ namespace ENetServer
             if (gameDataObject == null) return;
 
             // Send to server with ID 0.
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(0u, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            NetSendObject netSendObject = NetSendObject.Factory.CreateMessageOne(0u, gameDataObject);
+            NetworkManager.Instance.EnqueueNetSendObject(netSendObject);
         }
 
         private void TickReceive()
         {
             // Dequeue and get all GameRecvObjects in the queue at the start of the tick.
-            GameRecvObject?[] gameRecvObjects = NetworkManager.Instance.DequeueAllGameRecvObjects();
+            NetRecvObject?[] netRecvObjects = NetworkManager.Instance.DequeueAllNetRecvObjects();
 
             // Do not print output while testing.
             if (isTesting)
@@ -160,31 +160,31 @@ namespace ENetServer
             }
 
             // Actually handle each dequeued GameRecvObject, skipping if null.
-            foreach (var gameRecvObject in gameRecvObjects)
+            foreach (var recvObject in netRecvObjects)
             {
-                if (gameRecvObject == null) continue;
+                if (recvObject == null) continue;
 
                 // Operate based on receive type.
-                switch (gameRecvObject.RecvType)
+                switch (recvObject.RecvType)
                 {
                     case RecvType.Connect:
                         {
-                            HandleConnect(gameRecvObject);
+                            HandleConnect(recvObject);
                             break;
                         }
                     case RecvType.Disconnect:
                         {
-                            HandleDisconnect(gameRecvObject);
+                            HandleDisconnect(recvObject);
                             break;
                         }
                     case RecvType.Timeout:
                         {
-                            HandleTimeout(gameRecvObject);
+                            HandleTimeout(recvObject);
                             break;
                         }
                     case RecvType.Message:
                         {
-                            HandleMessage(gameRecvObject);
+                            HandleMessage(recvObject);
                             break;
                         }
                     case RecvType.TestRecv: // THIS CASE SHOULD NEVER BE REACHED, GAMESIMULATOR SHOULD BE PAUSED DURING TEST
@@ -203,86 +203,86 @@ namespace ENetServer
 
         #region Receive Handlers
 
-        private void HandleConnect(GameRecvObject gameRecvObject)
+        private void HandleConnect(NetRecvObject recvObject)
         {
             // Different message handling based on client or server.
             if (NetworkManager.Instance.IsServer)
             {
-                string temp = (gameRecvObject.Connection.IsServer) ? "Server" : "Client";
+                string temp = (recvObject.Connection.IsServer) ? "Server" : "Client";
                 Console.WriteLine("[CONNECT] {0} connected (ID: {1}), Address: {2}:{3}",
-                    temp, gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+                    temp, recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port);
             }
             else
             {
                 Console.WriteLine("[CONNECT] Successfully connected to server (ID: {0}), Address {1}:{2}",
-                    gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+                    recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port);
             }
 
             // Try to add new Connection to map.
-            Connections.TryAdd(gameRecvObject.Connection.ID, gameRecvObject.Connection);
+            Connections.TryAdd(recvObject.Connection.ID, recvObject.Connection);
         }
 
-        private void HandleDisconnect(GameRecvObject gameRecvObject)
+        private void HandleDisconnect(NetRecvObject recvObject)
         {
             // Different message handling based on client or server.
             if (NetworkManager.Instance.IsServer)
             {
-                string temp = (gameRecvObject.Connection.IsServer) ? "Server" : "Client";
+                string temp = (recvObject.Connection.IsServer) ? "Server" : "Client";
                 Console.WriteLine("[DISCONNECT] {0} disconnected (ID: {1}), Address: {2}:{3}",
-                    temp, gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+                    temp, recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port);
             }
             else
             {
                 Console.WriteLine("[DISCONNECT] Disconnected from server (ID: {0}), Address {1}:{2}",
-                    gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+                    recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port);
             }
 
             // Remove now-disconnected Connection from map.
-            Connections.Remove(gameRecvObject.Connection.ID, out _);
+            Connections.Remove(recvObject.Connection.ID, out _);
         }
 
-        private void HandleTimeout(GameRecvObject gameRecvObject)
+        private void HandleTimeout(NetRecvObject recvObject)
         {
             // Different message handling based on client or server.
             if (NetworkManager.Instance.IsServer)
             {
-                string temp = (gameRecvObject.Connection.IsServer) ? "Server" : "Client";
+                string temp = (recvObject.Connection.IsServer) ? "Server" : "Client";
                 Console.WriteLine("[TIMEOUT] {0} timed out (ID: {1}), Address: {2}:{3}",
-                    temp, gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+                    temp, recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port);
             }
             else
             {
                 Console.WriteLine("[TIMEOUT] Timed out from server (ID: {0}), Address {1}:{2}",
-                    gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port);
+                    recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port);
             }
 
             // Remove now-disconnected Connection from map.
-            Connections.Remove(gameRecvObject.Connection.ID, out _);
+            Connections.Remove(recvObject.Connection.ID, out _);
         }
 
-        private void HandleMessage(GameRecvObject gameRecvObject)
+        private void HandleMessage(NetRecvObject recvObject)
         {
             // Different message handling based on client or server.
             if (NetworkManager.Instance.IsServer)
             {
-                string temp = (gameRecvObject.Connection.IsServer) ? "server" : "client";
+                string temp = (recvObject.Connection.IsServer) ? "server" : "client";
                 Console.WriteLine("[MESSAGE] Message received from {0} (ID: {1}), Address: {2}:{3} Message: {4}",
-                    temp, gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port,
-                    gameRecvObject.GameDataObject?.GetDescription());
+                    temp, recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port,
+                    recvObject.GameDataObject?.GetDescription());
             }
             else
             {
                 Console.WriteLine("[MESSAGE] Message received from server (ID: {0}), Address: {1}:{2} Message: {3}",
-                    gameRecvObject.Connection.ID,
-                    gameRecvObject.Connection.IP, gameRecvObject.Connection.Port,
-                    gameRecvObject.GameDataObject?.GetDescription());
+                    recvObject.Connection.ID,
+                    recvObject.Connection.IP, recvObject.Connection.Port,
+                    recvObject.GameDataObject?.GetDescription());
             }
         }
 

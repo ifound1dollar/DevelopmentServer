@@ -26,7 +26,8 @@ namespace ServerExample
                     validPort = ushort.TryParse(userInput, out argPort);
                     if (argPort < ServerPortMin)
                     {
-                        Console.WriteLine("Port number out of range, defaulting to 8888.");
+                        Console.WriteLine("Port number out of range, defaulting to {0}.",
+                            ServerPortMin);
                         argPort = ServerPortMin;
                     }
                 }
@@ -172,8 +173,8 @@ namespace ServerExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            NetSendObject netSendObject = NetSendObject.Factory.CreateConnectOne(ip, port);
+            NetworkManager.Instance.EnqueueNetSendObject(netSendObject);
         }
 
         /// <summary>
@@ -183,8 +184,8 @@ namespace ServerExample
         {
             Console.WriteLine("[ACTION] Disconnecting all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            NetSendObject netSendObject = NetSendObject.Factory.CreateDisconnectAll(HostType.Both);
+            NetworkManager.Instance.EnqueueNetSendObject(netSendObject);
         }
 
         /// <summary>
@@ -202,8 +203,8 @@ namespace ServerExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            NetSendObject netSendObject = NetSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
+            NetworkManager.Instance.EnqueueNetSendObject(netSendObject);
         }
 
         /// <summary>
@@ -227,8 +228,8 @@ namespace ServerExample
                 return;
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            NetSendObject netSendObject = NetSendObject.Factory.CreateMessageAll(HostType.Client, gameDataObject);
+            NetworkManager.Instance.EnqueueNetSendObject(netSendObject);
         }
 
         /// <summary>
@@ -284,8 +285,8 @@ namespace ServerExample
 
                     if (gameDataObject != null)
                     {
-                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(sendCounter, gameDataObject);
-                        NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+                        NetSendObject netSendObject = NetSendObject.Factory.CreateTestSend(sendCounter, gameDataObject);
+                        NetworkManager.Instance.EnqueueNetSendObject(netSendObject);
                         sendCounter++;
 
                         if (sendCounter >= numObjects)
@@ -300,7 +301,7 @@ namespace ServerExample
                 {
                     // Using this while loop ensures that execution waits until the just-enqueued
                     //  GameSendObject returns as a GameRecvObject (keeps queues minimum size).
-                    //while (NetworkManager.Instance.DequeueGameRecvObject() == null)
+                    //while (NetworkManager.Instance.DequeueNetRecvObject() == null)
                     //{
 
                     //}
@@ -310,7 +311,7 @@ namespace ServerExample
                     //  dequeue. Enqueuing operations are executed faster, and this method works
                     //  as a means of seeing exactly how long it takes in total to complete
                     //  receive operations that do not cause send operations to wait.
-                    if (NetworkManager.Instance.DequeueGameRecvObject() != null)
+                    if (NetworkManager.Instance.DequeueNetRecvObject() != null)
                     {
                         recvCounter++;
                     }

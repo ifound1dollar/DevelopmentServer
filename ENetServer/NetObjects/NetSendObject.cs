@@ -15,138 +15,154 @@ namespace ENetServer.NetObjects
     /// Net object containing SERIALIZED network data TO BE SENT over the network.
     ///  Use NetSendObject.Factory to create objects.
     /// </summary>
-    internal class NetSendObject
+    public class NetSendObject
     {
-        internal SendType SendType { get; }
-        internal PeerParams PeerParams { get; }
-        internal byte[]? Bytes { get; }
+        public SendType SendType { get; }
+        public PeerParams PeerParams { get; }
+        public bool IsSerializable { get; }
+        public GameDataObject? GameDataObject { get; set; }
+        public byte[]? Bytes { get; set; }
 
         private NetSendObject(SendType sendType, PeerParams peerParams)
         {
             SendType = sendType;
             PeerParams = peerParams;
-            // Bytes remains null.
+            IsSerializable = false;
+            // GameDataObject remains null.
         }
 
-        private NetSendObject(SendType sendType, PeerParams peerParams, byte[]? bytes)
+        private NetSendObject(SendType sendType, PeerParams peerParams, GameDataObject gameDataObject)
         {
             SendType = sendType;
             PeerParams = peerParams;
-            Bytes = bytes;
+            IsSerializable = true;
+            GameDataObject = gameDataObject;
         }
 
 
 
         /// <summary>
-        /// Factory responsible for creating NetSendObjects. Each creator method corresponds to
+        /// Factory responsible for creating NetSendObjects. Each Factory method corresponds to
         ///  one SendType.
         /// </summary>
-        internal static class Factory
+        public static class Factory
         {
-            // NOTE: Each of the below Factory methods are almost identical (generally violating
-            //  the DRY principle) and could reasonably be consolidated into two methods: those
-            //  with payload data, and those without.
-            // However, using separate Factory methods for each SendType enforces safe creation
-            //  of these objects and gurantees that they will be formatted correctly (ex. an
-            //  object to be used for Connect cannot accidentally have the wrong SendType that
-            //  does not match the passed-in PeerParams object).
+            // NOTE: Using dedicated Factory methods for each SendType enforces safe object
+            //  creation and ensures that there will not be a mismatch between the intended
+            //  send operation and the object's actual SendType.
+            // Additionally, taking raw data as arguments rather than a pre-constructed
+            //  PeerParams object further reinforces this design principle, as the wrong
+            //  parameters cannot be sent for the intended SendType (ex. passing a Connect-
+            //  ready PeerParams object with a Disconnect_One SendType).
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for connecting to one remote host.
+            /// Creates and returns a new GameSendObject for connecting to one remote host.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (IP and Port). </param>
-            /// <returns> The newly created 'connect one' NetSendObject. </returns>
-            internal static NetSendObject CreateConnectOne(PeerParams peerParams)
+            /// <param name="ip"> IP address of peer attempting to connect to. </param>
+            /// <param name="port"> Port of peer attempting to connect to. </param>
+            /// <returns> The newly created 'connect one' GameSendObject. </returns>
+            public static NetSendObject CreateConnectOne(string ip, ushort port)
             {
+                PeerParams peerParams = new(ip, port);
                 return new NetSendObject(SendType.Connect_One, peerParams);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for disconnecting [from] one remote host.
+            /// Creates and returns a new GameSendObject for disconnecting [from] one remote host.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (ID only). </param>
-            /// <returns> The newly created 'disconnect one' NetSendObject. </returns>
-            internal static NetSendObject CreateDisconnectOne(PeerParams peerParams)
+            /// <param name="id"> ID of peer to disconnect [from]. </param>
+            /// <returns> The newly created 'disconnect one' GameSendObject. </returns>
+            public static NetSendObject CreateDisconnectOne(uint id)
             {
+                PeerParams peerParams = new(id);
                 return new NetSendObject(SendType.Disconnect_One, peerParams);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for disconnecting [from] many remote hosts.
+            /// Creates and returns a new GameSendObject for disconnecting [from] many remote hosts.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (array of IDs only). </param>
-            /// <returns> The newly created 'disconnect many' NetSendObject. </returns>
-            internal static NetSendObject CreateDisconnectMany(PeerParams peerParams)
+            /// <param name="idArray"> Array of peer IDs of hosts to disconnect [from]. </param>
+            /// <returns></returns>
+            public static NetSendObject CreateDisconnectMany(uint[] idArray)
             {
+                PeerParams peerParams = new(idArray);
                 return new NetSendObject(SendType.Disconnect_Many, peerParams);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for disconnecting all remote hosts.
+            /// Creates and returns a new GameSendObject for disconnecting [from] all remote hosts.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (HostType only). </param>
-            /// <returns> The newly created 'disconnect all' NetSendObject. </returns>
-            internal static NetSendObject CreateDisconnectAll(PeerParams peerParams)
+            /// <param name="hostType"> HostType that all peers must match (can be Both, should not be None). </param>
+            /// <returns> The newly created 'disconnect all' GameSendObject. </returns>
+            public static NetSendObject CreateDisconnectAll(HostType hostType)
             {
-                return new NetSendObject(SendType.Disconnect_All, peerParams);
+                PeerParams hostParams = new(hostType);
+                return new NetSendObject(SendType.Disconnect_All, hostParams);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for messaging one remote host.
+            /// Creates and returns a new GameSendObject for messaging one remote host.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (ID only). </param>
-            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
-            /// <returns> The newly created 'message one' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageOne(PeerParams peerParams, byte[] bytes)
+            /// <param name="id"> ID of peer to message. </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns> The newly created 'message one' GameSendObject. </returns>
+            public static NetSendObject CreateMessageOne(uint id, GameDataObject gameDataObject)
             {
-                return new NetSendObject(SendType.Message_One, peerParams, bytes);
+                PeerParams peerParams = new(id);
+                return new NetSendObject(SendType.Message_One, peerParams, gameDataObject);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for messaging many remote hosts.
+            /// Creates and returns a new GameSendObject for messaging many remote hosts.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (array of IDs only). </param>
-            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
-            /// <returns> The newly created 'message many' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageMany(PeerParams peerParams, byte[] bytes)
+            /// <param name="idArray"> Array of peer IDs of hosts to message. </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns></returns>
+            public static NetSendObject CreateMessageMany(uint[] idArray, GameDataObject gameDataObject)
             {
-                return new NetSendObject(SendType.Message_Many, peerParams, bytes);
+                PeerParams peerParams = new(idArray);
+                return new NetSendObject(SendType.Message_Many, peerParams, gameDataObject);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for messaging all remote hosts.
+            /// Creates and returns a new GameSendObject for messaging all remote hosts.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (HostType only). </param>
-            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
-            /// <returns> The newly created 'message all' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageAll(PeerParams peerParams, byte[] bytes)
+            /// <param name="hostType"> HostType all peers must match (can be Both, should not be None). </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns> The newly created 'message all' GameSendObject. </returns>
+            public static NetSendObject CreateMessageAll(HostType hostType, GameDataObject gameDataObject)
             {
-                return new NetSendObject(SendType.Message_All, peerParams, bytes);
+                PeerParams hostParams = new(hostType);
+                return new NetSendObject(SendType.Message_All, hostParams, gameDataObject);
             }
 
             /// <summary>
-            /// Creates and returns a new NetSendObject for message all remote hosts except one.
+            /// Creates and returns a new GameSendObject for messaging all remote hosts
+            ///  except one.
             /// </summary>
-            /// <param name="peerParams"> PeerParams containing necessary peer data (HostType and ID). </param>
-            /// <param name="bytes"> byte[] of serialized GameDataObject data. Must not be null. </param>
-            /// <returns> The newly created 'message all except' NetSendObject. </returns>
-            internal static NetSendObject CreateMessageAllExcept(PeerParams peerParams, byte[] bytes)
+            /// <param name="hostType"> HostType all peers must match (can be Both, should not be None). </param>
+            /// <param name="id"> ID of host to ignore. </param>
+            /// <param name="gameDataObject"> GameDataObject containing message contents. Must not be null. </param>
+            /// <returns> The newly created 'message all except' GameSendObject. </returns>
+            public static NetSendObject CreateMessageAllExcept(HostType hostType, uint id, GameDataObject gameDataObject)
             {
-                return new NetSendObject(SendType.Message_AllExcept, peerParams, bytes);
+                PeerParams peerParams = new(hostType, id);
+                return new NetSendObject(SendType.Message_AllExcept, peerParams, gameDataObject);
             }
 
 
 
             /// <summary>
-            /// Creates and returns a new TEST NetSendObject, which is not sent over the network but
+            /// Creates and returns a new TEST GameSendObject, which is not sent over the network but
             ///  instead is re-queued by the network thread.
             /// </summary>
-            /// <param name="peerParams"> TEST PeerParams object to simulate message send overhead. </param>
-            /// <param name="bytes"> TEST byte[] to simulate message send overhead. </param>
-            /// <returns> The newly created TEST NetSendObject. </returns>
-            internal static NetSendObject CreateTestSend(PeerParams peerParams, byte[] bytes)
+            /// <param name="id"> TEST peer ID to simulate message send overhead. </param>
+            /// <param name="gameDataObject"> TEST GameDataObject to simulate message send overhead. </param>
+            /// <returns> The newly created TEST GameSendObject. </returns>
+            public static NetSendObject CreateTestSend(uint id, GameDataObject gameDataObject)
             {
-                return new NetSendObject(SendType.TestSend, peerParams, bytes);
+                PeerParams peerParams = new(id);
+                return new NetSendObject(SendType.TestSend, peerParams, gameDataObject);
             }
 
         }

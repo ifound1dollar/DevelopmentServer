@@ -35,6 +35,9 @@ namespace ENetServer.NetObjects.DataObjects
 
 
 
+        // TODO: MAKE THESE METHODS RETURN BOOL AND INCLUDE OUT OBJECT, WILL ELIMINATE HAVING TO CHECK
+        //  FOR NULL AFTER METHOD CALL
+
         /// <summary>
         /// Attempts to serialize the passed-in GameDataObject into a byte[]. User should
         ///  verify success immediately after calling this method.

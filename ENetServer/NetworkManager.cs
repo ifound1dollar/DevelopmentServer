@@ -26,7 +26,7 @@ namespace ENetServer
         // The main thread needs only to call the SetupAsClient()/SetupAsServer(), StartThreadedOperations(),
         //  and StopThreadedOperations() methods to manage this class. These methods fully encapsulate all
         //  networking operations.
-        // Utilizing the NetworkManager only requires using EnqueueGameSendObject(), DequeueGameRecvObject(),
+        // Utilizing the NetworkManager only requires using EnqueueNetSendObject(), DequeueNetRecvObject(),
         //  and GetConnectedClient() (server only) to work with outgoing/incoming network data and with
         //  connected clients. The main/game thread can focus on working with the game data passed to /
         //  received from this class rather than handling the actual networking tasks (focus on gameplay and
@@ -56,8 +56,8 @@ namespace ENetServer
 
 
         // Thread-safe queues for communicating game data between main and serialization/intermediate threads.
-        private ConcurrentQueue<GameSendObject> GameSendQueue { get; } = new();
-        private ConcurrentQueue<GameRecvObject> GameRecvQueue { get; } = new();
+        private ConcurrentQueue<NetSendObject> GameSendQueue { get; } = new();
+        private ConcurrentQueue<NetRecvObject> GameRecvQueue { get; } = new();
 
         // Thread-safe queues for communicating network data between network and serialization/intermediate threads.
         private ConcurrentQueue<NetSendObject> NetSendQueue { get; } = new();
@@ -175,35 +175,35 @@ namespace ENetServer
 
 
 
-        public void EnqueueGameSendObject(GameSendObject gameSendObject)
+        public void EnqueueNetSendObject(NetSendObject netSendObject)
         {
             // Queues the passed-in GameSendObject to be processed and sent.
-            GameSendQueue.Enqueue(gameSendObject);
+            GameSendQueue.Enqueue(netSendObject);
         }
 
-        public GameRecvObject? DequeueGameRecvObject()
+        public NetRecvObject? DequeueNetRecvObject()
         {
             // Try to dequeue one, returning the result if successful or null if failed.
-            return GameRecvQueue.TryDequeue(out GameRecvObject? result) ? result : null;
+            return GameRecvQueue.TryDequeue(out NetRecvObject? result) ? result : null;
         }
 
         /// <summary>
-        /// Dequeues all GameRecvObjects in the queue at the instant this is called and returns
+        /// Dequeues all NetRecvObjects in the queue at the instant this is called and returns
         ///  as an array. Any objects enqueued during this method's execution will not be dequeued.
         /// </summary>
-        /// <returns> The array of GameRecvObjects pulled from the queue. </returns>
-        public GameRecvObject?[] DequeueAllGameRecvObjects()
+        /// <returns> The array of NetRecvObjects pulled from the queue. </returns>
+        public NetRecvObject?[] DequeueAllNetRecvObjects()
         {
             // Store current number of items in the queue, then create an array of exactly this size.
             int count = GameRecvQueue.Count;
-            GameRecvObject?[] tempArray = new GameRecvObject[count];
+            NetRecvObject?[] tempArray = new NetRecvObject[count];  //TODO: USE ARRAY POOL
 
             // Dequeue and add to array the stored number of queued items. Will ignore any items
             //  added to the queue while this method is executing (prevents potential infinite block).
             for (int i = 0; i < count; i++)
             {
-                GameRecvQueue.TryDequeue(out GameRecvObject? gameRecvObject);
-                tempArray[i] = gameRecvObject;
+                GameRecvQueue.TryDequeue(out NetRecvObject? netRecvObject);
+                tempArray[i] = netRecvObject;
             }
 
             return tempArray;
