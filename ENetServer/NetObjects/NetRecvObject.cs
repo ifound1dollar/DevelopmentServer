@@ -17,7 +17,7 @@ namespace ENetServer.NetObjects
     {
         public RecvType RecvType { get; }
         public Connection Connection { get; }
-        public bool IsDeserializable { get; }
+        //public bool IsDeserializable { get; }
         public byte[]? Bytes { get; set; }
         public GameDataObject? GameDataObject { get; set; }
 
@@ -25,7 +25,7 @@ namespace ENetServer.NetObjects
         {
             RecvType = recvType;
             Connection = connection;
-            IsDeserializable = false;
+            //IsDeserializable = false;
             // Bytes remains null.
         }
 
@@ -33,7 +33,7 @@ namespace ENetServer.NetObjects
         {
             RecvType = recvType;
             Connection = connection;
-            IsDeserializable = true;
+            //IsDeserializable = true;
             Bytes = bytes;
         }
 

@@ -19,7 +19,7 @@ namespace ENetServer.NetObjects
     {
         public SendType SendType { get; }
         public PeerParams PeerParams { get; }
-        public bool IsSerializable { get; }
+        //public bool IsSerializable { get; }
         public GameDataObject? GameDataObject { get; set; }
         public byte[]? Bytes { get; set; }
 
@@ -27,7 +27,7 @@ namespace ENetServer.NetObjects
         {
             SendType = sendType;
             PeerParams = peerParams;
-            IsSerializable = false;
+            //IsSerializable = false;
             // GameDataObject remains null.
         }
 
@@ -35,7 +35,7 @@ namespace ENetServer.NetObjects
         {
             SendType = sendType;
             PeerParams = peerParams;
-            IsSerializable = true;
+            //IsSerializable = true;
             GameDataObject = gameDataObject;
         }
 
