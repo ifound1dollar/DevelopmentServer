@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ENetServer.Serialize;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,15 +18,15 @@ namespace ENetServer.NetObjects.DataObjects
 
 
 
-        public override byte[] Serialize()
+        public override int Serialize(out byte[] bytes)
         {
-            // Convert all data into raw byte arrays to be concatenated below.
-            byte[] headerBytes = [(byte)DataType];
-            byte[] stringBytes = NetStatics.GetBytes(String);
+            // Create new ArrayBuffer and add data in specific order.
+            ArrayBuffer arrayBuffer = new ArrayBuffer(String.Length * 2)
+                .AddByte((byte)DataType)
+                .AddString(String);
 
-            // Concat all arrays together in this specific order, then return.
-            byte[] bytes = NetStatics.ConcatByteArrays(headerBytes, stringBytes);
-            return bytes;
+            bytes = arrayBuffer.Bytes;
+            return arrayBuffer.Length;
         }
 
         public override string GetDescription()
@@ -45,12 +46,12 @@ namespace ENetServer.NetObjects.DataObjects
             /// Attemps to create and return a new TextDataObject from default/raw data. User should
             ///  verify success immediately after calling this method.
             /// </summary>
-            /// <param name="str"> Text to be contained in the TextDataObject. Must not be null or empty. </param>
+            /// <param name="str"> Text to be contained in the TextDataObject. Must not be null, empty, or Length > 127. </param>
             /// <returns> The newly created TextDataObject, or null if unsuccessful (invalid argument). </returns>
             public static TextDataObject? CreateFromDefault(string str)
             {
                 // Validate argument data. String should not be null or empty.
-                if (string.IsNullOrEmpty(str))
+                if (string.IsNullOrEmpty(str) || str.Length > 127)
                 {
                     return null;
                 }
@@ -64,18 +65,22 @@ namespace ENetServer.NetObjects.DataObjects
             ///  verify success immediately after calling this method.
             /// </summary>
             /// <param name="bytes"> Raw byte[] containing serialized TextDataObject data. Must correctly formatted. </param>
+            /// <param name="length"> Length of data in byte[] (allocated size with Array.Length is probably longer). </param>
             /// <returns> The newly created TextDataObject, or null if unsuccessful (argument byte[] is malformed). </returns>
-            public static TextDataObject? CreateFromDeserialize(byte[] bytes)
+            public static TextDataObject? CreateFromDeserialize(byte[] bytes, int length)
             {
-                // Validate argument data. 1 byte for DataType, must be at least 1 byte for actual string data.
-                if (bytes.Length < 2)
+                // Validate argument data. 1 byte for DataType, must be at between 1 - 254 bytes for string data.
+                if (length < 2 || length > 255)
                 {
                     return null;
                 }
 
-                string tempString = NetStatics.GetString(bytes, 0, bytes.Length);
-                tempString = NetStatics.FormatStringForSend(tempString);
-                return new TextDataObject(tempString);
+                // Create ArrayBuffer from incoming data, then read data in reverse order.
+                ArrayBuffer arrayBuffer = new ArrayBuffer(bytes, length);
+
+                string str = arrayBuffer.ReadString();
+
+                return new TextDataObject(str);
             }
         }
     }

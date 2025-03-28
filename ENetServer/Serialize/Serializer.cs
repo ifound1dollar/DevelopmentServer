@@ -73,19 +73,21 @@ namespace ENetServer.Serialize
                     case SendType.Message_AllExcept:
                     case SendType.TestSend:
                         {
-                            // Attempt to serialize GameDataObject into byte[].
-                            if (GameDataObject.SerializeGameDataObject(gameSendObject.GameDataObject, out byte[]? bytes))
-                            {
-                                // If serialization successful, create GameRecvObject and enqueue to net.
-                                NetSendObject netSendObject = new(gameSendObject.SendType, gameSendObject.PeerParams, bytes);
-                                netSendQueue.Enqueue(netSendObject);
-                            }
-                            else
+                            // Verify GameDataObject is not null before trying to serialize.
+                            if (gameSendObject.GameDataObject == null)
                             {
                                 // Else unsuccessful, so log error and do not enqueue.
                                 Console.WriteLine("[SERIALIZER_ERROR] Cannot serialize a null GameDataObject. Aborting.");
+                                return;
                             }
 
+                            // Serialize GameDataObject into byte[], then enqueue to net.
+                            int length = GameDataObject.SerializeGameDataObject(gameSendObject.GameDataObject,
+                                out byte[] bytes);
+                            NetSendObject netSendObject = new(gameSendObject.SendType, gameSendObject.PeerParams,
+                                bytes, length);
+                            netSendQueue.Enqueue(netSendObject);
+                            
                             break;
                         }
                     // DO NOTHING FOR DEFAULT CASE
@@ -127,8 +129,12 @@ namespace ENetServer.Serialize
                     case RecvType.Message:
                     case RecvType.TestRecv:
                         {
+                            // Verify byte[] is not null before attempting to deserialize.
+                            if (netRecvObject.Bytes == null) return;
+
                             // Attempt to deserialize received byte[] into GameDataObject.
-                            if (GameDataObject.DeserializeGameDataObject(netRecvObject.Bytes, out GameDataObject? gameDataObject))
+                            if (GameDataObject.DeserializeGameDataObject(netRecvObject.Bytes, netRecvObject.Length,
+                                out GameDataObject? gameDataObject))
                             {
                                 // If deserialization successful, create GameRecvObject and enqueue to game.
                                 GameRecvObject gameRecvObject = new(netRecvObject.RecvType, netRecvObject.Connection, gameDataObject);

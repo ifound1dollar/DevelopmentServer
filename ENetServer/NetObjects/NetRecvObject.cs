@@ -16,22 +16,24 @@ namespace ENetServer.NetObjects
     /// </summary>
     internal class NetRecvObject
     {
-        internal RecvType RecvType { get; private set; }
-        internal Connection Connection { get; private set; }
-        internal byte[]? Bytes { get; private set; }
+        internal RecvType RecvType { get; }
+        internal Connection Connection { get; }
+        internal byte[]? Bytes { get; }
+        internal int Length { get; }
 
         private NetRecvObject(RecvType recvType, Connection connection)
         {
             RecvType = recvType;
             Connection = connection;
-            // Bytes remains null.
+            // Bytes remains null and Length remains 0.
         }
 
-        private NetRecvObject(RecvType recvType, Connection connection, byte[]? bytes)
+        private NetRecvObject(RecvType recvType, Connection connection, byte[]? bytes, int length)
         {
             RecvType = recvType;
             Connection = connection;
             Bytes = bytes;
+            Length = length;
         }
 
 
@@ -90,10 +92,11 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="connection"> Connection object corresponding to peer that message was received from. </param>
             /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
+            /// <param name="length"> The length of the actual data in the byte[] payload. </param>
             /// <returns> The newly created 'message' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes)
+            internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes, int length)
             {
-                return new NetRecvObject(RecvType.Message, connection, bytes);
+                return new NetRecvObject(RecvType.Message, connection, bytes, length);
             }
 
 
@@ -104,10 +107,11 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="connection"> TEST Connection to simulate message receive overhead. </param>
             /// <param name="bytes"> TEST byte[] to simulate message receive overhead. </param>
+            /// <param name="length"> TEST length of byte[] tosimulate message receive overhead. </param>
             /// <returns> The newly created TEST GameRecvObject. </returns>
-            internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes)
+            internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes, int length)
             {
-                return new NetRecvObject(RecvType.TestRecv, connection, bytes);
+                return new NetRecvObject(RecvType.TestRecv, connection, bytes, length);
             }
         }
     }

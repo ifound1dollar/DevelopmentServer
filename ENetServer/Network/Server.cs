@@ -2,6 +2,7 @@
 using ENetServer.NetObjects;
 using ENetServer.Network;
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using static ENetServer.NetStatics;
 
@@ -197,7 +198,7 @@ namespace ENetServer.Network
                             {
                                 Connection tempConnection = new(true);
                                 NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromTestRecv(
-                                    tempConnection, netSendObject.Bytes);
+                                    tempConnection, netSendObject.Bytes, netSendObject.Length);
                                 netRecvQueue.Enqueue(netRecvObject);
                             }
                             break;
@@ -416,9 +417,9 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
         internal void QueueMessageOne(NetSendObject netSendObject)
         {
-            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            // Create packet from passed-in byte[], only copying bytes for the specified length.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Only if a peer with this ID is found.
             if (Connections.TryGetValue(netSendObject.PeerParams.ID, out PeerConnection? peerConnection))
@@ -438,9 +439,9 @@ namespace ENetServer.Network
         /// <param name="netSendObject">  </param>
         internal void QueueMessageMany(NetSendObject netSendObject)
         {
-            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            // Create packet from passed-in byte[], only copying bytes for the specified length.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Iterate over IDArray and try to message any valid Connection with the ID.
             foreach (var id in netSendObject.PeerParams.IDArray)
@@ -464,9 +465,9 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
         internal void QueueMessageAll(NetSendObject netSendObject)
         {
-            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            // Create packet from passed-in byte[], only copying bytes for the specified length.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             HostType hostType = netSendObject.PeerParams.HostType;
 
@@ -507,9 +508,9 @@ namespace ENetServer.Network
         /// <param name="netSendObject"> NetSendObject containing relevant peer and payload data. </param>        
         internal void QueueMessageAllExcept(NetSendObject netSendObject)
         {
-            // Create packet from passed-in byte[], which is already in ready-to-send format.
+            // Create packet from passed-in byte[], only copying bytes for the specified length.
             Packet packet = default;
-            packet.Create(netSendObject.Bytes);
+            packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             HostType hostType = netSendObject.PeerParams.HostType;
 
@@ -593,14 +594,15 @@ namespace ENetServer.Network
         private void HandleReceiveEvent(ref Event receiveEvent)
         {
             // Copy packet payload into byte[].
-            byte[] bytes = new byte[receiveEvent.Packet.Length];
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
             receiveEvent.Packet.CopyTo(bytes);
 
             // Get PeerConnection from map and enqueue Connection if successful.
             if (Connections.TryGetValue(receiveEvent.Peer.ID, out PeerConnection? peerConnection))
             {
                 // Enqueue NetRecvObject with this peer's Connection.
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerConnection.Connection, bytes);
+                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerConnection.Connection, bytes, length);
                 netRecvQueue.Enqueue(dataObject);
             }
 

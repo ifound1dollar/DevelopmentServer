@@ -20,19 +20,21 @@ namespace ENetServer.NetObjects
         internal SendType SendType { get; }
         internal PeerParams PeerParams { get; }
         internal byte[]? Bytes { get; }
+        internal int Length { get; }
 
         public NetSendObject(SendType sendType, PeerParams peerParams)
         {
             SendType = sendType;
             PeerParams = peerParams;
-            // Bytes remains null.
+            // Bytes remains null and Length remains 0.
         }
 
-        public NetSendObject(SendType sendType, PeerParams peerParams, byte[] bytes)
+        public NetSendObject(SendType sendType, PeerParams peerParams, byte[] bytes, int length)
         {
             SendType = sendType;
             PeerParams = peerParams;
             Bytes = bytes;
+            Length = length;
         }
 
     }

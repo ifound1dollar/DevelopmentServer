@@ -3,6 +3,7 @@ using System.Collections;
 using System;
 using System.Diagnostics;
 using System.Text;
+using System.Buffers;
 
 namespace ENetServer
 {
@@ -59,8 +60,8 @@ namespace ENetServer
         /// <returns> The byte[] generated from the string. </returns>
         //public static byte[] CreateByteArrayFromUTF8String(string message)
         //{
-        //    byte[] bytes = Encoding.UTF8.GetBytes(message);
-        //    return bytes;
+        //    byte[] Bytes = Encoding.UTF8.GetBytes(message);
+        //    return Bytes;
         //}
 
         #endregion
@@ -134,7 +135,7 @@ namespace ENetServer
 
         public static uint GetUInt(byte[] values, int startIndex)
         {
-            return BitConverter.ToUInt32(values, startIndex);   // Always reads exactly four bytes
+            return BitConverter.ToUInt32(values, startIndex);   // Always reads exactly four Bytes
         }
         public static uint[] GetUInts(byte[] values, int startIndex, int length)
         {
@@ -184,7 +185,7 @@ namespace ENetServer
         {
             byte[] bytes = new byte[first.Length + second.Length];
 
-            // Copy first array directly into bytes, then copy second array starting at end of first.
+            // Copy first array directly into Bytes, then copy second array starting at end of first.
             Array.Copy(first, bytes, first.Length);
             Array.Copy(second, 0, bytes, first.Length, second.Length);
 
@@ -196,11 +197,11 @@ namespace ENetServer
         /// </summary>
         /// <param name="bytes"> A series of byte arrays, in order, which will be merged into one array. </param>
         /// <returns> The resulting merged byte[]. </returns>
-        public static byte[] ConcatByteArrays(params byte[][] bytes)
+        public static byte[] ConcatByteArrays(ref byte[] outBytes, params byte[][] bytes)
         {
             int position = 0;
 
-            // Use selector to sum the length of each input array, then use to initialize outputArray.
+            // Use selector to sum the Length of each input array, then use to initialize outputArray.
             byte[] outputArray = new byte[bytes.Sum(a => a.Length)];
 
             // Loop over each input byte[] and copy to outputArray.
