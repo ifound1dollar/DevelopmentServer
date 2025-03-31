@@ -21,6 +21,7 @@ namespace ENetServer.NetObjects.DataObjects
         public override int Serialize(out byte[] bytes)
         {
             // Create new ArrayBuffer and add data in specific order.
+            // Double length because 2 bytes per char (+ size byte immediately after).
             ArrayBuffer arrayBuffer = new ArrayBuffer(String.Length * 2)
                 .AddByte((byte)DataType)
                 .AddString(String);
