@@ -13,6 +13,7 @@ namespace ENetServer.NetObjects.DataObjects
         None = 0,
         Text = 1,
         Transform = 2,
+        TEST = 255
     }
     // NOTE: Adding a new DataType requires a few operations:
     //  1. Here! Make a new DataType.
@@ -85,6 +86,11 @@ namespace ENetServer.NetObjects.DataObjects
                 case DataType.Transform:
                     {
                         gameDataObject = TransformDataObject.Factory.CreateFromDeserialize(bytes, length);
+                        break;
+                    }
+                case DataType.TEST:
+                    {
+                        gameDataObject = TESTDataObject.Factory.CreateFromDeserialize(bytes, length);
                         break;
                     }
                 // DataType.None or default cases are implicitly caught here, leaving GameDataObject null.

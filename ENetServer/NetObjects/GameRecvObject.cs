@@ -16,22 +16,25 @@ namespace ENetServer.NetObjects
     /// </summary>
     public class GameRecvObject
     {
-        public RecvType RecvType { get; private set; }
-        public Connection Connection { get; private set; }
-        public GameDataObject? GameDataObject { get; private set; }
+        public RecvType RecvType { get; }
+        public PeerParams PeerParams { get; }
+        public uint Data { get; }
+        public GameDataObject? GameDataObject { get; }
 
-        public GameRecvObject(RecvType recvType, Connection connection)
+        public GameRecvObject(RecvType recvType, PeerParams peerParams, uint data)
         {
             RecvType = recvType;
-            Connection = connection;
+            PeerParams = peerParams;
+            Data = data;
             // GameDataObject remains null.
         }
 
-        public GameRecvObject(RecvType recvType, Connection connection, GameDataObject gameDataObject)
+        public GameRecvObject(RecvType recvType, PeerParams peerParams, GameDataObject gameDataObject)
         {
             RecvType = recvType;
-            Connection = connection;
+            PeerParams = peerParams;
             GameDataObject = gameDataObject;
+            // Data remains 0.
         }
 
     }

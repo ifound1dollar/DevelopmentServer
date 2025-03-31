@@ -151,7 +151,7 @@ namespace ClientExample
             Console.WriteLine("[ACTION] Attempting to connect to remote host at {0}:{1}...", ip, port);
 
             // First, verify that we are not already connected to a host with this information.
-            var temp = GameSimulator.Connections.ToArray();
+            var temp = GameSimulator.Clients.ToArray();
             foreach (var client in temp)
             {
                 if (client.Value.IP == ip && client.Value.Port == port)
@@ -161,7 +161,7 @@ namespace ClientExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, 8888u);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -174,9 +174,9 @@ namespace ClientExample
             Console.WriteLine("[ACTION] Attempting to disconnect from server with ID {0}...", peerId);
 
             // Try to find a Connection object for this peer ID, enqueuing if found.
-            if (GameSimulator.Connections.TryGetValue(peerId, out var connection))
+            if (GameSimulator.Clients.TryGetValue(peerId, out var connection))
             {
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(connection.ID);
+                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(connection.ID, 0u);
                 NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
             }
             else
@@ -192,7 +192,7 @@ namespace ClientExample
         {
             Console.WriteLine("[ACTION] Disconnecting from all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both, 0u);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 

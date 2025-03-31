@@ -48,6 +48,17 @@ namespace ENetServer.NetObjects
             IDArray = [];
         }
 
+        internal PeerParams(HostType hostType, uint id, string ip, ushort port)
+        {
+            HostType = hostType;
+            ID = id;
+            IP = ip;
+            Port = port;
+
+            // Initialize unused reference types.
+            IDArray = [];
+        }
+
         /// <summary>
         /// Constructs a PeerParams object with Disconnect_All OR Message_All data.
         /// </summary>

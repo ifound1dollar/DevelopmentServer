@@ -17,23 +17,26 @@ namespace ENetServer.NetObjects
     internal class NetRecvObject
     {
         internal RecvType RecvType { get; }
-        internal Connection Connection { get; }
+        internal PeerParams PeerParams { get; }
+        internal uint Data { get; }
         internal byte[]? Bytes { get; }
         internal int Length { get; }
 
-        private NetRecvObject(RecvType recvType, Connection connection)
+        private NetRecvObject(RecvType recvType, PeerParams peerParams, uint data)
         {
             RecvType = recvType;
-            Connection = connection;
+            PeerParams = peerParams;
+            Data = data;
             // Bytes remains null and Length remains 0.
         }
 
-        private NetRecvObject(RecvType recvType, Connection connection, byte[]? bytes, int length)
+        private NetRecvObject(RecvType recvType, PeerParams peerParams, byte[]? bytes, int length)
         {
             RecvType = recvType;
-            Connection = connection;
+            PeerParams = peerParams;
             Bytes = bytes;
             Length = length;
+            // Data remains 0.
         }
 
 
@@ -57,61 +60,49 @@ namespace ENetServer.NetObjects
             /// Creates and returns a new NetRecvObject from a 'connect' ENet event. Requires only
             ///  peer information (no byte[] payload).
             /// </summary>
-            /// <param name="connection"> Connection object corresponding to peer that just connected. </param>
+            /// <param name="peerParams"> PeerParams object corresponding to peer that just connected. </param>
+            /// <param name="data"> Data uint from connect event. </param>
             /// <returns> The newly created 'connect' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromConnect(Connection connection)
+            internal static NetRecvObject CreateFromConnect(PeerParams peerParams, uint data)
             {
-                return new NetRecvObject(RecvType.Connect, connection);
+                return new NetRecvObject(RecvType.Connect, peerParams, data);
             }
 
             /// <summary>
             /// Creates and returns a new NetRecvObject from a 'disconnect' ENet event. Requires
             ///  only peer information (no byte[] payload).
             /// </summary>
-            /// <param name="connection"> Connection object corresponding to peer that just disconnected. </param>
+            /// <param name="peerParams"> PeerParams object corresponding to peer that just disconnected. </param>
+            /// <param name="data"> Data uint from disconnect event. </param>
             /// <returns> The newly created 'disconnect' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromDisconnect(Connection connection)
+            internal static NetRecvObject CreateFromDisconnect(PeerParams peerParams, uint data)
             {
-                return new NetRecvObject(RecvType.Disconnect, connection);
+                return new NetRecvObject(RecvType.Disconnect, peerParams, data);
             }
 
             /// <summary>
             /// Creates and returns a new NetRecvObject from a 'timeout' ENet event. Requires
             ///  only peer information (no byte[] payload).
             /// </summary>
-            /// <param name="connection"> Connection object corresponding to peer that just timed out. </param>
+            /// <param name="peerParams"> PeerParams object corresponding to peer that just timed out. </param>
+            /// <param name="data"> Data uint from timeout event. </param>
             /// <returns> The newly created 'timeout' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromTimeout(Connection connection)
+            internal static NetRecvObject CreateFromTimeout(PeerParams peerParams, uint data)
             {
-                return new NetRecvObject(RecvType.Timeout, connection);
+                return new NetRecvObject(RecvType.Timeout, peerParams, data);
             }
 
             /// <summary>
             /// Creates and returns a new NetRecvObject from a 'message' ENet event. Requires
             ///  peer information and byte[] payload of incoming message packet.
             /// </summary>
-            /// <param name="connection"> Connection object corresponding to peer that message was received from. </param>
+            /// <param name="peerParams"> PeerParams object corresponding to peer that message was received from. </param>
             /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
             /// <param name="length"> The length of the actual data in the byte[] payload. </param>
             /// <returns> The newly created 'message' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromMessage(Connection connection, byte[] bytes, int length)
+            internal static NetRecvObject CreateFromMessage(PeerParams peerParams, byte[] bytes, int length)
             {
-                return new NetRecvObject(RecvType.Message, connection, bytes, length);
-            }
-
-
-
-            /// <summary>
-            /// Creates and returns a new TEST NetRecvObject, which was not actually received over the
-            ///  but was simply re-queued by the network thread.
-            /// </summary>
-            /// <param name="connection"> TEST Connection to simulate message receive overhead. </param>
-            /// <param name="bytes"> TEST byte[] to simulate message receive overhead. </param>
-            /// <param name="length"> TEST length of byte[] tosimulate message receive overhead. </param>
-            /// <returns> The newly created TEST GameRecvObject. </returns>
-            internal static NetRecvObject CreateFromTestRecv(Connection connection, byte[] bytes, int length)
-            {
-                return new NetRecvObject(RecvType.TestRecv, connection, bytes, length);
+                return new NetRecvObject(RecvType.Message, peerParams, bytes, length);
             }
         }
     }

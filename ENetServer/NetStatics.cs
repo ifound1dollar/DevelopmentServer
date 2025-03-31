@@ -15,7 +15,7 @@ namespace ENetServer
         public enum HostType { None, Server, Client, Both }
         public enum SendType { None, Connect_One, Disconnect_One, Disconnect_Many, Disconnect_All,
             Message_One, Message_Many, Message_All, Message_AllExcept, TestSend }
-        public enum RecvType { None, Connect, Disconnect, Timeout, Message, TestRecv }
+        public enum RecvType { None, Connect, Disconnect, Timeout, Message }
 
 
         public static ushort ServerPortMin { get; } = 7777;

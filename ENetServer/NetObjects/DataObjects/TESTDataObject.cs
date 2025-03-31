@@ -7,11 +7,11 @@ using System.Threading.Tasks;
 
 namespace ENetServer.NetObjects.DataObjects
 {
-    public class TextDataObject : GameDataObject
+    public class TESTDataObject : GameDataObject
     {
         public string String { get; }
 
-        private TextDataObject(string str) : base(DataType.Text)
+        private TESTDataObject(string str) : base(DataType.TEST)
         {
             String = str;
         }
@@ -32,7 +32,7 @@ namespace ENetServer.NetObjects.DataObjects
 
         public override string GetDescription()
         {
-            return "[TextDataObject] String: " + String;
+            return "[TESTDataObject] DATA: " + String;
         }
 
 
@@ -44,12 +44,12 @@ namespace ENetServer.NetObjects.DataObjects
         public static class Factory
         {
             /// <summary>
-            /// Attemps to create and return a new TextDataObject from default/raw data. User should
+            /// Attemps to create and return a new TESTDataObject from default/raw data. User should
             ///  verify success immediately after calling this method.
             /// </summary>
-            /// <param name="str"> Text to be contained in the TextDataObject. Must not be null, empty, or Length > 127. </param>
-            /// <returns> The newly created TextDataObject, or null if unsuccessful (invalid argument). </returns>
-            public static TextDataObject? CreateFromDefault(string str)
+            /// <param name="str"> Text to be contained in the TESTDataObject. Must not be null, empty, or Length > 127. </param>
+            /// <returns> The newly created TESTDataObject, or null if unsuccessful (invalid argument). </returns>
+            public static TESTDataObject? CreateFromDefault(string str)
             {
                 // Validate argument data. String should not be null or empty.
                 if (string.IsNullOrEmpty(str) || str.Length > 127)
@@ -58,17 +58,17 @@ namespace ENetServer.NetObjects.DataObjects
                 }
 
                 string temp = NetStatics.FormatStringForSend(str);
-                return new TextDataObject(temp);
+                return new TESTDataObject(temp);
             }
 
             /// <summary>
-            /// Attempts to create and return a new TextDataObject by deserializing from a byte[]. User should
+            /// Attempts to create and return a new TESTDataObject by deserializing from a byte[]. User should
             ///  verify success immediately after calling this method.
             /// </summary>
-            /// <param name="bytes"> Raw byte[] containing serialized TextDataObject data. Must correctly formatted. </param>
+            /// <param name="bytes"> Raw byte[] containing serialized TESTDataObject data. Must correctly formatted. </param>
             /// <param name="length"> Length of data in byte[] (allocated size with Array.Length is probably longer). </param>
-            /// <returns> The newly created TextDataObject, or null if unsuccessful (argument byte[] is malformed). </returns>
-            public static TextDataObject? CreateFromDeserialize(byte[] bytes, int length)
+            /// <returns> The newly created TESTDataObject, or null if unsuccessful (argument byte[] is malformed). </returns>
+            public static TESTDataObject? CreateFromDeserialize(byte[] bytes, int length)
             {
                 // Validate argument data. 1 byte for DataType, must be at between 1 - 254 bytes for string data.
                 if (length < 2 || length > 255)
@@ -80,9 +80,8 @@ namespace ENetServer.NetObjects.DataObjects
                 ArrayBuffer arrayBuffer = new ArrayBuffer(bytes, length);
 
                 string str = arrayBuffer.ReadString();
-                str = NetStatics.FormatStringFromReceive(str);
 
-                return new TextDataObject(str);
+                return new TESTDataObject(str);
             }
         }
     }

@@ -163,7 +163,7 @@ namespace ServerExample
             Console.WriteLine("[ACTION] Attempting to connect to remote host at {0}:{1}...", ip, port);
 
             // First, verify that we are not already connected to a host with this information.
-            var temp = GameSimulator.Connections.ToArray();
+            var temp = GameSimulator.Clients.ToArray();
             foreach (var host in temp)
             {
                 if (host.Value.IP == ip && host.Value.Port == port)
@@ -173,7 +173,7 @@ namespace ServerExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, 7777u);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -184,7 +184,7 @@ namespace ServerExample
         {
             Console.WriteLine("[ACTION] Disconnecting all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both, 0u);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 
@@ -248,7 +248,7 @@ namespace ServerExample
             Stopwatch sw = Stopwatch.StartNew();
             while (sw.ElapsedMilliseconds < durationMS)
             {
-                TextDataObject.Factory.CreateFromDefault("test");
+                TESTDataObject.Factory.CreateFromDefault(counter.ToString());
                 //TransformDataObject.Factory.CreateFromDefault(0, [0, 1, 2, 3, 4, 5, 6, 7, 8]);
                 counter++;
             }
@@ -277,15 +277,13 @@ namespace ServerExample
             // Run stress test until BOTH send and receive have dequeued all.
             while (sendCounter < numObjects || recvCounter < numObjects)
             {
+                // Send
                 if (sendCounter < numObjects)
                 {
-                    GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(sendCounter.ToString());
-                    //GameDataObject? gameDataObject = TransformDataObject.Factory.CreateFromDefault(sendCounter,
-                    //    [1.0d, 2.0d, 3.0d, 0.0d, 0.0d, 0.0d, 1.0d, 1.0d, 1.0d]);
-
+                    GameDataObject? gameDataObject = TESTDataObject.Factory.CreateFromDefault(sendCounter.ToString());
                     if (gameDataObject != null)
                     {
-                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(sendCounter, gameDataObject);
+                        GameSendObject gameSendObject = GameSendObject.Factory.CreateTestSend(false, sendCounter, gameDataObject);
                         NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
                         sendCounter++;
 
@@ -297,6 +295,7 @@ namespace ServerExample
                     }
                 }
 
+                // Recv
                 if (recvCounter < numObjects)
                 {
                     // Using this while loop ensures that execution waits until the just-enqueued

@@ -9,11 +9,12 @@ namespace ENetServer.Network
 {
     public class Connection
     {
-        public uint ID { get; set; }
-        public string IP { get; }
-        public ushort Port { get; }
-        public DateTime ConnectTime { get; set; }
-        public bool IsServer { get; set; }
+        public uint ID { get; private set; }
+        public string IP { get; private set; }
+        public ushort Port { get; private set; }
+        public DateTime ConnectTime { get; private set; }
+        public bool IsServer { get; private set; }
+        public bool IsValidated { get; private set; } = false;
 
         public Connection(bool isServer)
         {
@@ -34,6 +35,8 @@ namespace ENetServer.Network
             IP = ip;
             Port = port;
             IsServer = isServer;
+
+            ConnectTime = DateTime.Now;
         }
 
         public Connection(uint id, string ip, ushort port, DateTime connectTime, bool isServer)
@@ -43,6 +46,13 @@ namespace ENetServer.Network
             Port = port;
             ConnectTime = connectTime;
             IsServer = isServer;
+        }
+
+
+
+        public void Validate()
+        {
+            IsValidated = true;
         }
     }
 }
