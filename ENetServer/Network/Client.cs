@@ -44,7 +44,7 @@ namespace ENetServer.Network
         /// Map of all servers this client is connected to in form ID:Peer.
         /// </summary>
         private Dictionary<uint, Peer> Servers { get; } = new();
-        private Dictionary<uint, Peer> AllPeers { get; } = new();
+        private HashSet<Peer> AllPeers { get; } = new();
 
         internal Address GetAddress()
         {
@@ -114,8 +114,8 @@ namespace ENetServer.Network
                 // Verify that the peer is valid.
                 if (peer.Value.State != PeerState.Connected) continue;
 
-                // Disconnect with default data value.
-                peer.Value.Disconnect(0);
+                // Disconnect with uint 300u, sending peer-initiated disconnect on host shutdown.
+                peer.Value.Disconnect(300u);    // Is received by peer.
             }
 
             // Wait 3 seconds for clients to respond to disconnect request.
@@ -294,8 +294,8 @@ namespace ENetServer.Network
             string ip = netSendObject.PeerParams.IP;
             ushort port = netSendObject.PeerParams.Port;
 
-            // Verify port is within valid range (outbound connections can only ever be to servers).
-            if (port < ServerPortMin && port >= ClientPortMin)
+            // Verify port is within valid range (outbound connections can only ever be to game servers).
+            if (port < ServerPortMin || port >= ClientPortMin)
             {
                 Console.WriteLine("[ERROR] Specified port out of range for new Connect attempt. Valid range: {0}-{1}",
                     ServerPortMin, ClientPortMin - 1);
@@ -324,7 +324,7 @@ namespace ENetServer.Network
                 if (pendingPeer != null)
                 {
                     pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
-                    AllPeers[pendingPeer.Value.ID] = pendingPeer.Value;
+                    AllPeers.Add(pendingPeer.Value);
                 }
             }
             catch (InvalidOperationException ex)
@@ -466,19 +466,13 @@ namespace ENetServer.Network
         {
             // If new connection is from another client, immediately disconnect that Peer.
             // OR if new connection is not in AllPeers (meaning this client did not initiate), disconnect.
-            if (connectEvent.Peer.Port >= ClientPortMin || !AllPeers.ContainsKey(connectEvent.Peer.ID))
+            if (connectEvent.Peer.Port >= ClientPortMin || !AllPeers.Contains(connectEvent.Peer))
             {
                 connectEvent.Peer.Disconnect(2000u);    // Data of 2000u indicates invalid new connection.
             }
 
-            // Add this peer to Servers map.
-            Servers[connectEvent.Peer.ID] = connectEvent.Peer;
-
-            // Enqueue connect object with new peer's Connection for use by other threads.
-            PeerParams peerParams = new(HostType.Server, connectEvent.Peer.ID, connectEvent.Peer.IP, connectEvent.Peer.Port);
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                peerParams, connectEvent.Data);
-            netRecvQueue.Enqueue(dataObject);
+            // Else new connection was from a server, so handle new server connection.
+            ProcessGameServerConnect(ref connectEvent);
         }
 
         private void HandleDisconnectEvent(ref Event disconnectEvent)
@@ -486,10 +480,13 @@ namespace ENetServer.Network
             // Remove Peer from map and enqueue if successful.
             if (Servers.Remove(disconnectEvent.Peer.ID, out Peer peer))
             {
+                // If Data uint is 0, then event is an automatic ACK from disconnect initialized here.
+                uint data = (disconnectEvent.Data == 0) ? 201u : disconnectEvent.Data;
+
                 // Enqueue disconnect object with disconnected peer's data for use by other threads.
                 PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
-                    peerParams, disconnectEvent.Data);
+                    peerParams, data);
                 netRecvQueue.Enqueue(dataObject);
             }
         }
@@ -502,25 +499,24 @@ namespace ENetServer.Network
                 // Enqueue timeout object with timed-out peer's data for use by other threads.
                 PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
-                    peerParams, timeoutEvent.Data);
+                    peerParams, 400u);
                 netRecvQueue.Enqueue(dataObject);
             }
         }
 
         private void HandleReceiveEvent(ref Event receiveEvent)
         {
-            // Only if an entry for this peer exists in map.
-            if (Servers.TryGetValue(receiveEvent.Peer.ID, out Peer peer))
-            {
-                // Copy packet payload into byte[].
-                int length = receiveEvent.Packet.Length;
-                byte[] bytes = new byte[length];
-                receiveEvent.Packet.CopyTo(bytes);
+            Peer peer = receiveEvent.Peer;
 
-                // Enqueue NetRecvObject with this peer's data.
-                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerParams, bytes, length);
-                netRecvQueue.Enqueue(dataObject);
+            // If message received from Peer which is not in map, this client is not validated.
+            if (!Servers.ContainsKey(peer.ID))
+            {
+                ProcessGameServerValidationResponse(ref receiveEvent);
+            }
+            // Else is in map (validated), so enqueue as normal message.
+            else
+            {
+                ProcessGameServerMessage(ref receiveEvent);
             }
 
             // Always dispose packet after handling receive, even if did not enqueue NetRecvObject.
@@ -529,5 +525,70 @@ namespace ENetServer.Network
 
         #endregion
 
+        #region Connect processing
+
+        private void ProcessGameServerConnect(ref Event connectEvent)
+        {
+            Peer peer = connectEvent.Peer;
+
+            // Add new server to AllPeers, but NOT valid Servers map yet.
+            AllPeers.Add(peer);
+
+            // Client must immediately send login token as raw data to server to validate connection.
+            string token = "0f8fad5bd9cb469fa16570867728950e";
+            token = NetStatics.FormatStringForSend(token);
+
+            // Create packet with login token and send.
+            Packet packet = default;
+            packet.Create(NetStatics.GetBytes(token));
+            peer.Send(0, ref packet);
+        }
+
+        #endregion
+
+        #region Message processing
+
+        private void ProcessGameServerMessage(ref Event receiveEvent)
+        {
+            Peer peer = receiveEvent.Peer;
+
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
+            // Enqueue NetRecvObject with this peer's data.
+            PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerParams, bytes, length);
+            netRecvQueue.Enqueue(dataObject);
+        }
+
+        private void ProcessGameServerValidationResponse(ref Event receiveEvent)
+        {
+            Peer peer = receiveEvent.Peer;
+
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
+            // Get login token from raw packet data, then check whether is a valid token.
+            string str = NetStatics.GetString(bytes, 0, length);
+            str = NetStatics.FormatStringFromReceive(str);
+
+            // If validation response contains expected data, add Peer to map (now valid)
+            if (!string.IsNullOrEmpty(str)) // TEMP NOT ACTUAL VALIDATION
+            {
+                Servers[peer.ID] = peer;
+            }
+
+            // Enqueue connect object with new peer's Connection for use by other threads.
+            PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                peerParams, 101u);
+            netRecvQueue.Enqueue(dataObject);
+        }
+
+        #endregion
     }
 }

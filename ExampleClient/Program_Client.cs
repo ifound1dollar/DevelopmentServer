@@ -174,9 +174,9 @@ namespace ClientExample
             Console.WriteLine("[ACTION] Attempting to disconnect from server with ID {0}...", peerId);
 
             // Try to find a Connection object for this peer ID, enqueuing if found.
-            if (GameSimulator.Clients.TryGetValue(peerId, out var connection))
+            if (GameSimulator.Connected.TryGetValue(peerId, out var connection))
             {
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(connection.ID, 0u);
+                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(connection.ID, 200u);
                 NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
             }
             else
@@ -192,7 +192,7 @@ namespace ClientExample
         {
             Console.WriteLine("[ACTION] Disconnecting from all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both, 0u);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both, 200u);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 

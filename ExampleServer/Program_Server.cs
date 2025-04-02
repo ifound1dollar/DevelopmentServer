@@ -184,7 +184,7 @@ namespace ServerExample
         {
             Console.WriteLine("[ACTION] Disconnecting all remote hosts.");
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both, 0u);
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectAll(HostType.Both, 200u);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 

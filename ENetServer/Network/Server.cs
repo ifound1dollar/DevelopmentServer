@@ -1,5 +1,6 @@
 ﻿using ENet;
 using ENetServer.NetObjects;
+using ENetServer.NetObjects.DataObjects;
 using ENetServer.Network;
 using System;
 using System.Buffers;
@@ -42,7 +43,13 @@ namespace ENetServer.Network
         /// </summary>
         private Dictionary<uint, Peer> Clients { get; } = new();
         private Dictionary<uint, Peer> Servers { get; } = new();
-        private Dictionary<uint, Peer> AllPeers { get; } = new();
+        private Dictionary<uint, Peer> Connected { get; } = new();
+        private HashSet<Peer> PendingServers { get; } = new();
+        private HashSet<Peer> AllPeers { get; } = new();
+
+        private Peer? MasterServer { get; set; } = null;
+        private HashSet<uint> Checksums { get; } = [ 7777u, 8888u ];
+        private HashSet<string> LoginTokens { get; } = [ "0f8fad5bd9cb469fa16570867728950e", "1f8fad5bd9cb469fa16570867728950e"];
 
         internal Address GetAddress()
         {
@@ -80,6 +87,13 @@ namespace ENetServer.Network
             // Create server Host with address and args.
             serverHost = new();
             serverHost.Create(address, peerLimit, channelLimit, 0u, 0u, 1024 * 1024);   // 1024*1024 is maximum buffer size in enet.h
+
+            // Immediately attempt to connect to MasterServer on server start.
+            // TODO: IMPLEMENT MASTER SERVER CONNECTION HERE, WAITING 3 SECONDS FOR CONNECTION SUCCESS
+            // OR, MAYBE DO NOT WAIT FOR CONNECTION HERE - CONNECTION ATTEMPT WILL BE FIRST ENET
+            //  EVENT DISPATCHED ONCE LOOP STARTS
+            // IF WAIT FOR CONNECTION HERE: remove master server connect check from connect receive
+            //  method. ELSE IF NOT WAITING FOR CONNECTION, leave master server connect check.
         }
 
         /// <summary>
@@ -110,8 +124,8 @@ namespace ENetServer.Network
                 // Verify that the peer is valid.
                 if (peer.Value.State != PeerState.Connected) continue;
 
-                // Disconnect with default data value.
-                peer.Value.Disconnect(0);
+                // Disconnect with uint 300u, sending peer-initiated disconnect on host shutdown.
+                peer.Value.Disconnect(300u);    // Is received by peer.
             }
 
             // Wait 3 seconds for clients to respond to disconnect request.
@@ -296,19 +310,19 @@ namespace ENetServer.Network
             ushort port = netSendObject.PeerParams.Port;
 
             // Verify port is within valid range (outbound connections can only ever be to servers).
-            if (port < ServerPortMin && port >= ClientPortMin)
+            if (port < 7776 || port >= ClientPortMin)
             {
                 Console.WriteLine("[ERROR] Specified port out of range for new Connect attempt. Valid range: {0}-{1}",
-                    ServerPortMin, ClientPortMin - 1);
+                    7776, ClientPortMin - 1);
                 return;
             }
 
             // Verify not trying to connect to a Host already connected to.
-            foreach (var peer in Clients)
+            foreach (var peer in Connected)
             {
                 if (peer.Value.IP == ip && peer.Value.Port == port)
                 {
-                    Console.WriteLine("[ERROR] Attempted to connect to an existing Connection. Aborting.");
+                    Console.WriteLine("[ERROR] Cannot connect to an existing Connection. Aborting.");
                     return;
                 }
             }
@@ -325,7 +339,7 @@ namespace ENetServer.Network
                 if (pendingPeer != null)
                 {
                     pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
-                    AllPeers[pendingPeer.Value.ID] = pendingPeer.Value;
+                    AllPeers.Add(pendingPeer.Value);
                 }
             }
             catch (InvalidOperationException ex)
@@ -341,9 +355,7 @@ namespace ENetServer.Network
         internal void QueueDisconnectOne(NetSendObject netSendObject)
         {
             // Only if a peer with this ID is found.
-            uint id = netSendObject.PeerParams.ID;
-            Peer peer;
-            if (Clients.TryGetValue(id, out peer) || Servers.TryGetValue(id, out peer))
+            if (Connected.TryGetValue(netSendObject.PeerParams.ID, out Peer peer))
             {
                 // Verify that the peer is valid.
                 if (peer.State != PeerState.Connected) return;
@@ -363,8 +375,7 @@ namespace ENetServer.Network
             foreach (var id in netSendObject.PeerParams.IDArray)
             {
                 // Only if a peer with this ID is found.
-                Peer peer;
-                if (Clients.TryGetValue(id, out peer) || Servers.TryGetValue(id, out peer))
+                if (Connected.TryGetValue(id, out Peer peer))
                 {
                     // Verify that the peer is valid.
                     if (peer.State != PeerState.Connected) return;
@@ -382,37 +393,25 @@ namespace ENetServer.Network
         /// <param name="netSendObject">  </param>
         internal void QueueDisconnectAll(NetSendObject netSendObject)
         {
+            // Use HostType to determine which map to iterate over.
+            Dictionary<uint, Peer> dict;
             HostType hostType = netSendObject.PeerParams.HostType;
-
-            // If HostType is both, do not do any filtering.
-            if (hostType == HostType.Both)
+            switch (hostType)
             {
-                foreach (var peer in Clients)
-                {
-                    // Verify that the peer is valid.
-                    if (peer.Value.State != PeerState.Connected) continue;
-
-                    // Disconnect with data value.
-                    peer.Value.Disconnect(netSendObject.Data);
-                }
-                foreach (var peer in Servers)
-                {
-                    if (peer.Value.State != PeerState.Connected) continue;
-                    peer.Value.Disconnect(netSendObject.Data);
-                }
+                case HostType.Both: dict = Connected; break;
+                case HostType.Server: dict = Servers; break;
+                case HostType.Client: dict = Clients; break;
+                default: dict = []; break; // Empty if no HostType (send to none).
             }
-            // Else if HostType is exclusively one or the other, filter each Peer.
-            else if (hostType == HostType.Server || hostType == HostType.Client)
+
+            // Iterate over all Peers in map and disconnect if valid.
+            foreach (var peer in dict)
             {
-                bool isServer = (netSendObject.PeerParams.HostType != HostType.Server);
-                Dictionary<uint, Peer> dict = (isServer) ? Servers : Clients;
+                // Verify that the peer is valid.
+                if (peer.Value.State != PeerState.Connected) continue;
 
-                foreach (var peer in dict)
-                {
-                    if (peer.Value.State != PeerState.Connected) continue;
-
-                    peer.Value.Disconnect(netSendObject.Data);
-                }
+                // Disconnect with data value.
+                peer.Value.Disconnect(netSendObject.Data);
             }
         }
 
@@ -430,9 +429,7 @@ namespace ENetServer.Network
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Only if a peer with this ID is found.
-            uint id = netSendObject.PeerParams.ID;
-            Peer peer;
-            if (Clients.TryGetValue(id, out peer) || Servers.TryGetValue(id, out peer))
+            if (Connected.TryGetValue(netSendObject.PeerParams.ID, out Peer peer))
             {
                 // Verify that the peer is valid.
                 if (peer.State != PeerState.Connected) return;
@@ -453,11 +450,10 @@ namespace ENetServer.Network
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Iterate over IDArray and try to message any valid Connection with the ID.
-            foreach (var id in netSendObject.PeerParams.IDArray)
+            foreach (uint id in netSendObject.PeerParams.IDArray)
             {
                 // Only if a peer with this ID is found.
-                Peer peer;
-                if (Clients.TryGetValue(id, out peer) || Servers.TryGetValue(id, out peer))
+                if (Connected.TryGetValue(id, out Peer peer))
                 {
                     // Verify that the peer is valid.
                     if (peer.State != PeerState.Connected) return;
@@ -478,38 +474,25 @@ namespace ENetServer.Network
             Packet packet = default;
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
+            // Use HostType to determine which map to iterate over.
+            Dictionary<uint, Peer> dict;
             HostType hostType = netSendObject.PeerParams.HostType;
-
-            // If HostType is both, do not do any filtering.
-            if (hostType == HostType.Both)
+            switch (hostType)
             {
-                foreach (var peer in Clients)
-                {
-                    // Verify that the peer is valid.
-                    if (peer.Value.State != PeerState.Connected) continue;
-
-                    // TEMP send on channel 0.
-                    peer.Value.Send(0, ref packet);
-                }
-                foreach (var peer in Servers)
-                {
-                    if (peer.Value.State != PeerState.Connected) continue;
-                    peer.Value.Send(0, ref packet);
-                }
+                case HostType.Both: dict = Connected; break;
+                case HostType.Server: dict = Servers; break;
+                case HostType.Client: dict = Clients; break;
+                default: dict = []; break; // Empty if no HostType (send to none).
             }
-            // Else if HostType is exclusively one or the other, filter each Connection.
-            else if (hostType == HostType.Server || hostType == HostType.Client)
+
+            // Iterate over all elements in correct map, sending to each valid Peer.
+            foreach (var peer in dict)
             {
-                bool isServer = (netSendObject.PeerParams.HostType != HostType.Server);
-                Dictionary<uint, Peer> dict = (isServer) ? Servers : Clients;
+                // Verify that the peer is valid.
+                if (peer.Value.State != PeerState.Connected) continue;
 
-                foreach (var peer in dict)
-                {
-                    if (peer.Value.State != PeerState.Connected) continue;
-
-                    // TEMP send on channel 0.
-                    peer.Value.Send(0, ref packet);
-                }
+                // TEMP send on channel 0.
+                peer.Value.Send(0, ref packet);
             }
         }
 
@@ -523,45 +506,28 @@ namespace ENetServer.Network
             Packet packet = default;
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
+            // Use HostType to determine which map to iterate over.
+            Dictionary<uint, Peer> dict;
             HostType hostType = netSendObject.PeerParams.HostType;
-
-            // If HostType is both, do not do any filtering.
-            if (hostType == HostType.Both)
+            switch (hostType)
             {
-                foreach (var peer in Clients)
-                {
-                    // Skipped passed-in peer ID.
-                    if (peer.Key == netSendObject.PeerParams.ID) continue;
-
-                    // Verify that the peer is valid.
-                    if (peer.Value.State != PeerState.Connected) continue;
-
-                    // TEMP send on channel 0.
-                    peer.Value.Send(0, ref packet);
-                }
-                foreach (var peer in Servers)
-                {
-                    if (peer.Key == netSendObject.PeerParams.ID) continue;
-                    if (peer.Value.State != PeerState.Connected) continue;
-                    peer.Value.Send(0, ref packet);
-                }
+                case HostType.Both: dict = Connected; break;
+                case HostType.Server: dict = Servers; break;
+                case HostType.Client: dict = Clients; break;
+                default: dict = []; break; // Empty if no HostType (send to none).
             }
-            // Else if HostType is exclusively one or the other, filter each Connection.
-            else if (hostType == HostType.Server || hostType == HostType.Client)
+
+            // Iterate over all elements in correct map, sending to each valid Peer.
+            foreach (var peer in dict)
             {
-                bool isServer = (netSendObject.PeerParams.HostType != HostType.Server);
-                Dictionary<uint, Peer> dict = (isServer) ? Servers : Clients;
+                // Skipped passed-in peer ID.
+                if (peer.Key == netSendObject.PeerParams.ID) continue;
 
-                foreach (var peer in dict)
-                {
-                    // Skip passed-in peer ID.
-                    if (peer.Key == netSendObject.PeerParams.ID) continue;
+                // Verify that the peer is valid.
+                if (peer.Value.State != PeerState.Connected) continue;
 
-                    if (peer.Value.State != PeerState.Connected) continue;
-
-                    // TEMP send on channel 0.
-                    peer.Value.Send(0, ref packet);
-                }
+                // TEMP send on channel 0.
+                peer.Value.Send(0, ref packet);
             }
         }
 
@@ -571,99 +537,153 @@ namespace ENetServer.Network
 
         private void HandleConnectEvent(ref Event connectEvent)
         {
-            // If below client port minimum, is server (server min (7777) is always less than client min (8888)).
-            bool isServer = connectEvent.Peer.Port < ClientPortMin;
-
-            // Add new Peer to correct Dictionary and AllPeers.
             Peer peer = connectEvent.Peer;
-            PeerParams peerParams;
-            if (isServer)
+
+            if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
-                peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                Servers[connectEvent.Peer.ID] = connectEvent.Peer;
+                ProcessClientConnect(ref connectEvent);
+            }
+            else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
+            {
+                ProcessGameServerConnect(ref connectEvent);
+            }
+            else if (peer.Port == 7776)                     // Master Server port should be 7776.
+            {
+                ProcessMasterServerConnect(ref connectEvent);
             }
             else
             {
-                peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-                Clients[connectEvent.Peer.ID] = connectEvent.Peer;
+                // DO NOTHING HERE? IS INVALID PORT RANGE (below 7776)
             }
-            AllPeers[connectEvent.Peer.ID] = connectEvent.Peer;
-
-            // Enqueue connect object with new peer's data for use by other threads.
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                peerParams, connectEvent.Data);
-            netRecvQueue.Enqueue(dataObject);
         }
 
         private void HandleDisconnectEvent(ref Event disconnectEvent)
         {
-            // Remove Peer from map and enqueue if successful.
-            Peer peer;
-            if (Clients.Remove(disconnectEvent.Peer.ID, out peer))
+            Peer peer = disconnectEvent.Peer;
+
+            if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
-                // Enqueue disconnect object with disconnected peer's data for use by other threads.
-                PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
-                    peerParams, disconnectEvent.Data);
-                netRecvQueue.Enqueue(dataObject);
+                // Remove Peer from map and enqueue if successful.
+                if (Clients.Remove(peer.ID, out _) || Connected.Remove(peer.ID, out _))
+                {
+                    AllPeers.Remove(peer);
+
+                    // If Data uint is 0, then event is an automatic ACK from disconnect initialized here.
+                    uint data = (disconnectEvent.Data == 0) ? 201u : disconnectEvent.Data;
+
+                    // Enqueue disconnect object with disconnected peer's data for use by other threads.
+                    PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
+                        peerParams, data);
+                    netRecvQueue.Enqueue(dataObject);
+                }
             }
-            if (Servers.Remove(disconnectEvent.Peer.ID, out peer))
+            else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
-                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
-                    peerParams, disconnectEvent.Data);
-                netRecvQueue.Enqueue(dataObject);
+                // Remove Peer from map and enqueue if successful.
+                if (Servers.Remove(peer.ID, out _) || Connected.Remove(peer.ID, out _))
+                {
+                    AllPeers.Remove(peer);
+
+                    // If Data uint is 0, then event is an automatic ACK from disconnect initialized here.
+                    uint data = (disconnectEvent.Data == 0) ? 201u : disconnectEvent.Data;
+
+                    // Enqueue disconnect object with disconnected peer's data for use by other threads.
+                    PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
+                        peerParams, data);
+                    netRecvQueue.Enqueue(dataObject);
+                }
+            }
+            else if (peer.Port == 7776)                     // Master Server port should be 7776.
+            {
+                // DOES THIS MATTER TO GAME THREAD?
+            }
+            else
+            {
+                // DO NOTHING HERE? IS INVALID PORT RANGE (below 7776)
             }
         }
 
         private void HandleTimeoutEvent(ref Event timeoutEvent)
         {
-            // Remove Peer from map and enqueue if successful.
-            Peer peer;
-            if (Clients.Remove(timeoutEvent.Peer.ID, out peer))
+            Peer peer = timeoutEvent.Peer;
+
+            if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
-                // Enqueue disconnect object with disconnected peer's data for use by other threads.
-                PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
-                    peerParams, timeoutEvent.Data);
-                netRecvQueue.Enqueue(dataObject);
+                AllPeers.Remove(peer);
+
+                // Remove Peer from map and enqueue if successful.
+                if (Clients.Remove(peer.ID, out _) || Connected.Remove(peer.ID, out _))
+                {
+                    // Enqueue disconnect object with disconnected peer's data for use by other threads.
+                    PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
+                        peerParams, 400u);
+                    netRecvQueue.Enqueue(dataObject);
+                }
             }
-            if (Servers.Remove(timeoutEvent.Peer.ID, out peer))
+            else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
-                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
-                    peerParams, timeoutEvent.Data);
-                netRecvQueue.Enqueue(dataObject);
+                AllPeers.Remove(peer);
+
+                // Remove Peer from map and enqueue if successful.
+                if (Servers.Remove(peer.ID, out _) || Connected.Remove(peer.ID, out _))
+                {
+                    // Enqueue disconnect object with disconnected peer's data for use by other threads.
+                    PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
+                        peerParams, 400u);
+                    netRecvQueue.Enqueue(dataObject);
+                }
+            }
+            else if (peer.Port == 7776)                     // Master Server port should be 7776.
+            {
+                // DOES THIS MATTER TO GAME THREAD?
+            }
+            else
+            {
+                // DO NOTHING HERE? IS INVALID PORT RANGE (below 7776)
             }
         }
 
         private void HandleReceiveEvent(ref Event receiveEvent)
         {
-            // Try to get Peer from map, operating if successful.
-            Peer peer;
-            if (Clients.TryGetValue(receiveEvent.Peer.ID, out peer))
-            {
-                // Copy packet payload into byte[].
-                int length = receiveEvent.Packet.Length;
-                byte[] bytes = new byte[length];
-                receiveEvent.Packet.CopyTo(bytes);
+            Peer peer = receiveEvent.Peer;
 
-                // Enqueue NetRecvObject with this peer's data.
-                PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
-                    peerParams, bytes, length);
-                netRecvQueue.Enqueue(dataObject);
+            if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
+            {
+                // If received from client which is not in map, is not yet validated.
+                if (!Clients.ContainsKey(peer.ID))
+                {
+                    ProcessClientTokenVerification(ref receiveEvent);
+                }
+                // Else is in map (validated), so enqueue as normal message.
+                else
+                {
+                    ProcessClientMessage(ref receiveEvent);
+                }
             }
-            if (Servers.TryGetValue(receiveEvent.Peer.ID, out peer))
+            else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
-                int length = receiveEvent.Packet.Length;
-                byte[] bytes = new byte[length];
-                receiveEvent.Packet.CopyTo(bytes);
-
-                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
-                    peerParams, bytes, length);
-                netRecvQueue.Enqueue(dataObject);
+                // If received from server which is not in map, is not yet validated.
+                if (!Servers.ContainsKey(peer.ID))
+                {
+                    ProcessGameServerTokenVerification(ref receiveEvent);
+                }
+                // Else is in map (validated), so enqueue as normal message.
+                else
+                {
+                    ProcessGameServerMessage(ref receiveEvent);
+                }
+            }
+            else if (peer.Port == 7776)                     // Master Server port should be 7776.
+            {
+                ProcessMasterServerMessage(ref receiveEvent);
+            }
+            else
+            {
+                // DO NOTHING HERE? IS INVALID PORT RANGE (below 7776)
             }
 
             // Always dispose packet after handling receive, even if did not enqueue NetRecvObject.
@@ -672,5 +692,255 @@ namespace ENetServer.Network
 
         #endregion
 
+        #region Connect processing
+
+        private void ProcessMasterServerConnect(ref Event connectEvent)
+        {
+            Peer peer = connectEvent.Peer;
+            if (MasterServer == null)
+            {
+                Console.WriteLine("[CONNECT] Successfully connected to master server (ID: {0}), Address {1}:{2}",
+                peer.ID, peer.IP, peer.Port);
+
+                // Set MasterServer Peer.
+                MasterServer = connectEvent.Peer;
+            }
+            else
+            {
+                Console.WriteLine("[ERROR] Invalid new connection on port 7776 - MasterServer connection already exists.");
+
+                // Data uint of 1006 indicates master server validation error.
+                peer.DisconnectNow(1006u);
+            }
+        }
+
+        private void ProcessGameServerConnect(ref Event connectEvent)
+        {
+            // If Peer is already in AllPeers, then this server was the initiator of the attempted
+            //  connection (added to AllPeers on connection request send).
+            // Else, this server is receiving an initial connection attempt (totally new Peer).
+            Peer peer = connectEvent.Peer;
+            bool isInitiator = AllPeers.Contains(peer);
+
+            if (isInitiator)
+            {
+                // Add to PendingServers, which is needed for proper validation behavior.
+                PendingServers.Add(peer);
+
+                // Initial connection successful, so must send over login ack immediately.
+                string token = "1f8fad5bd9cb469fa16570867728950e";
+                token = NetStatics.FormatStringForSend(token);
+
+                // Create packet with login ack and send.
+                Packet packet = default;
+                packet.Create(NetStatics.GetBytes(token));
+                peer.Send(0, ref packet);
+            }
+            else
+            {
+                // If new connection passes valid checksum, consider preliminary connection.
+                if (/*Checksums.Remove(connectEvent.Data)*/Checksums.Contains(connectEvent.Data))
+                {
+                    // Add new Peer to AllPeers, awaiting validation message.
+                    AllPeers.Add(peer);
+                }
+                // Else force disconnect immediately.
+                else
+                {
+                    Console.WriteLine("[ERROR] Invalid new connection from {0}:{1} - checksum failed. Checksum: {2}",
+                        peer.IP, peer.Port, connectEvent.Data);
+
+                    // Data uint of 1001 indicates server validation error.
+                    peer.DisconnectNow(1001u);
+                }
+                
+            }
+        }
+
+        private void ProcessClientConnect(ref Event connectEvent)
+        {
+            Peer peer = connectEvent.Peer;
+
+            // If new connection passes valid checksum, consider preliminary connection.
+            if (/*Checksums.Remove(connectEvent.Data)*/Checksums.Contains(connectEvent.Data))
+            {
+                // Add new client to AllPeers, but NOT valid connection maps yet.
+                AllPeers.Add(peer);
+            }
+            // Else force disconnect immediately.
+            else
+            {
+                Console.WriteLine("[ERROR] Invalid new connection from {0}:{1} - checksum failed. Checksum: {2}",
+                    peer.IP, peer.Port, connectEvent.Data);
+
+                // Data uint of 1000u indicates client validation error.
+                peer.DisconnectNow(1000u);
+            }
+        }
+
+        #endregion
+
+        #region Message processing
+
+        private void ProcessMasterServerMessage(ref Event receiveEvent)
+        {
+            // READ DATA IN EXPECTED STRUCTURE AND ADD TO BOTH HASH SETS
+        }
+
+        private void ProcessGameServerMessage(ref Event receiveEvent)
+        {
+            Peer peer = receiveEvent.Peer;
+
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
+            // Enqueue NetRecvObject with this peer's data.
+            PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
+                peerParams, bytes, length);
+            netRecvQueue.Enqueue(dataObject);
+        }
+
+        private void ProcessGameServerTokenVerification(ref Event receiveEvent)
+        {
+            // NOTE: This method is the first to be called in a server->server connection attempt,
+            //  specifically when the connected-to server receives a message from a server Peer
+            //  which is not yet in the Servers map.
+            // The initiating client will have sent a connect request, received a connect response,
+            //  then sent over its login ack with validation being handled here.
+            // This method processes an unvalidated message from another server. It will either
+            //  send back a 'verification success' ACK back to the initiating server, or will
+            //  interpret this message as the ACK (depending on whether this Peer is pending or
+            //  not).
+            // If is pending, then this is the initiating server that is waiting for the ACK, so
+            //  check whether this message is in correct ACK format.
+            // Else this is the receiving server, so actually verify the login ack to fully
+            //  validate the other server. Sends back a validation ACK if successful ack.
+
+            Peer peer = receiveEvent.Peer;
+
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
+            // Get EITHER login ack OR validation ACK from packet.
+            string str = NetStatics.GetString(bytes, 0, length);
+            str = NetStatics.FormatStringFromReceive(str);
+
+            // If pending, is initiator so message should be validation ACK.
+            if (PendingServers.Remove(peer))
+            {
+                // If validation response contains expected data, add Peer to map (now valid)
+                if (!string.IsNullOrEmpty(str)) // TEMP NOT ACTUAL VALIDATION
+                {
+                    Servers[peer.ID] = peer;
+                    Connected[peer.ID] = peer;
+
+                    // Validation has fully completed, so enqueue successful connect object.
+                    PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                        peerParams, 101u);
+                    netRecvQueue.Enqueue(dataObject);
+                }
+                else
+                {
+                    Console.WriteLine("[ERROR] Error in validation ACK, disconnecting (ID: {0})", peer.ID);
+
+                    // Immediately disconnect this server, data uint 1001u means validation error.
+                    peer.DisconnectNow(1001u);
+                    return;
+                }
+            }
+            // Else is not initiator so should verify login ACK.
+            else
+            {
+                if (/*LoginTokens.Remove(textDataObject.String*/LoginTokens.Contains(str))
+                {
+                    Servers[peer.ID] = peer;
+                    Connected[peer.ID] = peer;
+
+                    // Create packet with validation ACK and send.
+                    string ack = NetStatics.FormatStringForSend("Server validation successful.");
+                    Packet packet = default;
+                    packet.Create(NetStatics.GetBytes(ack));
+                    peer.Send(0, ref packet);
+
+                    // Validation has fully completed, so enqueue successful connect object.
+                    PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                        peerParams, 100u);
+                    netRecvQueue.Enqueue(dataObject);
+                }
+                else
+                {
+                    Console.WriteLine("[DISCONNECT] Server failed validation check, disconnecting (ID: {0})",
+                        peer.ID);
+
+                    // Immediately disconnect this server, data uint 1001u means validation error.
+                    peer.DisconnectNow(1001u);
+                    return;
+                }
+            }
+        }
+
+        private void ProcessClientMessage(ref Event receiveEvent)
+        {
+            Peer peer = receiveEvent.Peer;
+
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
+            // Enqueue NetRecvObject with this peer's data.
+            PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
+                peerParams, bytes, length);
+            netRecvQueue.Enqueue(dataObject);
+        }
+
+        private void ProcessClientTokenVerification(ref Event receiveEvent)
+        {
+            Peer peer = receiveEvent.Peer;
+
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
+            // Get login ack from raw packet data, then check whether is a valid ack.
+            string str = NetStatics.GetString(bytes, 0, length);
+            str = NetStatics.FormatStringFromReceive(str);
+
+            if (/*LoginTokens.Remove(textDataObject.String*/LoginTokens.Contains(str))
+            {
+                Clients[peer.ID] = peer;
+                Connected[peer.ID] = peer;
+
+                // Create packet with validation ACK and send.
+                string ack = NetStatics.FormatStringForSend("Server validation successful.");
+                Packet packet = default;
+                packet.Create(NetStatics.GetBytes(ack));
+                peer.Send(0, ref packet);
+
+                // Enqueue successful connect and pass to main/game thread.
+                PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
+                NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromConnect(peerParams, 100u);
+                netRecvQueue.Enqueue(netRecvObject);
+            }
+            else
+            {
+                Console.WriteLine("[DISCONNECT] Client failed validation check, disconnecting (ID: {0})",
+                    peer.ID);
+
+                // Immediately disconnect this client, data uint 1000u means validation error.
+                peer.DisconnectNow(1000u);
+            }
+        }
+
+        #endregion
     }
 }

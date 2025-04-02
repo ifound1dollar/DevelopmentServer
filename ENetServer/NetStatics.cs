@@ -216,5 +216,21 @@ namespace ENetServer
 
         #endregion
 
+
+
+
+
+        ///             NETWORK DATA CODES
+        /// 100  | Successful peer-initiated connection
+        /// 101  | Successful self-initiated connection
+        /// 200  | Peer-initiated disconnect
+        /// 201  | Self-initiated disconnect
+        /// 300  | Peer-initiated disconnect on shutdown
+        /// 301  | Self-initiated disconnect on shutdown
+        /// 400  | Timeout
+        /// 1000 | Client validation error
+        /// 1001 | Server validation error
+        /// 1006 | Master server connection error
+        /// 2000 | Disallowed new connection error
     }
 }

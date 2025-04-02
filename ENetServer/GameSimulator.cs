@@ -26,9 +26,7 @@ namespace ENetServer
         /// </summary>
         public ConcurrentDictionary<uint, Connection> Clients { get; } = new();
         public ConcurrentDictionary<uint, Connection> Servers { get; } = new();
-        private Connection? MasterServer { get; set; }
-        private HashSet<uint> Checksums { get; } = [ 7777u, 8888u ];
-        private HashSet<string> LoginTokens { get; } = [ "0f8fad5bd9cb469fa16570867728950e" ];
+        public ConcurrentDictionary<uint, Connection> Connected { get; } = new();
 
         private string TempClientLoginToken { get; } = "0f8fad5bd9cb469fa16570867728950e";
 
@@ -210,21 +208,29 @@ namespace ENetServer
 
         private void HandleConnect(GameRecvObject gameRecvObject)
         {
-            // Validate new connection from MasterServer port.
-            if (gameRecvObject.PeerParams.Port == 7776)
-            {
-                ProcessMasterServerConnect(gameRecvObject);
-            }
+            PeerParams peerParams = gameRecvObject.PeerParams;
 
-            // Handle connection from other game server.
-            if (gameRecvObject.PeerParams.HostType == HostType.Server)
+            if (peerParams.HostType == HostType.Server)
             {
-                ProcessGameServerConnect(gameRecvObject);
+                Console.WriteLine("[CONNECT] Connected to server (ID: {0}), Address: {1}:{2}, Data: {3}",
+                    gameRecvObject.PeerParams.ID,
+                    gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
+                    gameRecvObject.Data);
+
+                Connection connection = new(peerParams.ID, peerParams.IP, peerParams.Port, true);
+                Servers[peerParams.ID] = connection;
+                Connected[peerParams.ID] = connection;
             }
-            // Else if connection is from client.
-            else if (gameRecvObject.PeerParams.HostType == HostType.Client)
+            else if (peerParams.HostType == HostType.Client)
             {
-                ProcessClientConnect(gameRecvObject);
+                Console.WriteLine("[CONNECT] Client connected (ID: {0}), Address: {1}:{2}, Data: {3}",
+                    gameRecvObject.PeerParams.ID,
+                    gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
+                    gameRecvObject.Data);
+
+                Connection connection = new(peerParams.ID, peerParams.IP, peerParams.Port, false);
+                Clients[peerParams.ID] = connection;
+                Connected[peerParams.ID] = connection;
             }
         }
 
@@ -240,6 +246,7 @@ namespace ENetServer
                     gameRecvObject.Data);
 
                 Servers.Remove(peerParams.ID, out _);
+                Connected.Remove(peerParams.ID, out _);
             }
             else if (peerParams.HostType == HostType.Client)
             {
@@ -249,6 +256,7 @@ namespace ENetServer
                     gameRecvObject.Data);
 
                 Clients.Remove(peerParams.ID, out _);
+                Connected.Remove(peerParams.ID, out _);
             }
         }
 
@@ -264,15 +272,17 @@ namespace ENetServer
                     gameRecvObject.Data);
 
                 Servers.Remove(peerParams.ID, out _);
+                Connected.Remove(peerParams.ID, out _);
             }
             else if (peerParams.HostType == HostType.Client)
             {
-                Console.WriteLine("[TIMEOUT] Server timed out (ID: {0}), Address: {1}:{2}, Data: {3}",
+                Console.WriteLine("[TIMEOUT] Client timed out (ID: {0}), Address: {1}:{2}, Data: {3}",
                     gameRecvObject.PeerParams.ID,
                     gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
                     gameRecvObject.Data);
 
                 Clients.Remove(peerParams.ID, out _);
+                Connected.Remove(peerParams.ID, out _);
             }
         }
 
@@ -280,193 +290,19 @@ namespace ENetServer
         {
             PeerParams peerParams = gameRecvObject.PeerParams;
 
-            // If from master server, should contain login info (token and checksum).
-            if (peerParams.Port == 7776 && MasterServer != null)
-            {
-                ProcessMasterServerMessage(gameRecvObject);
-            }
-
-            // If message received from server.
             if (peerParams.HostType == HostType.Server)
             {
-                if (!Servers.TryGetValue(peerParams.ID, out Connection? connection)) return;
-
-                ProcessGameServerMessage(gameRecvObject);
+                Console.WriteLine("[MESSAGE] Server message (ID: {0}), Address: {1}:{2}, Message: {3}",
+                    gameRecvObject.PeerParams.ID,
+                    gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
+                    gameRecvObject.GameDataObject?.GetDescription());
             }
-            // Else handle message received from client.
             else if (peerParams.HostType == HostType.Client)
             {
-                if (!Clients.TryGetValue(peerParams.ID, out Connection? connection)) return;
-
-                // If connection is not validated, this message must contain login token.
-                if (!connection.IsValidated)
-                {
-                    ProcessClientTokenVerification(gameRecvObject.GameDataObject, peerParams, connection);
-                }
-                else
-                {
-                    ProcessClientMessage(gameRecvObject);
-                }
-            }
-        }
-
-        #endregion
-
-        #region Connect processing
-
-        private void ProcessMasterServerConnect(GameRecvObject gameRecvObject)
-        {
-            PeerParams peerParams = gameRecvObject.PeerParams;
-
-            if (MasterServer == null)
-            {
-                Console.WriteLine("[CONNECT] Successfully connected to master server (ID: {0}), Address {1}:{2}",
-                gameRecvObject.PeerParams.ID,
-                gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port);
-
-                // Initialize MasterServer object with new Connection.
-                MasterServer = new(peerParams.ID, peerParams.IP, peerParams.Port, true);
-            }
-            else
-            {
-                Console.WriteLine("[ERROR] Invalid new connection on port 7776 - MasterServer connection already exists.");
-
-                // Data uint of 1006 indicates master server validation error.
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(peerParams.ID, 1006);
-                NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
-            }
-        }
-
-        private void ProcessGameServerConnect(GameRecvObject gameRecvObject)
-        {
-            PeerParams peerParams = gameRecvObject.PeerParams;
-
-            Console.WriteLine("[CONNECT] New connection to game server (ID: {0}), Address: {1}:{2}, Data: {3}",
-                    gameRecvObject.PeerParams.ID,
-                    gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
-                    gameRecvObject.Data);
-
-            // Create new connection and add to Servers map.
-            Connection connection = new(peerParams.ID, peerParams.IP, peerParams.Port, true);
-            Servers[peerParams.ID] = connection;
-
-
-
-            /* ----- BELOW CODE NEEDED FOR CLIENT ONLY ----- */
-
-            // Client must send login token to new server connection immediately.
-            GameDataObject? gameDataObject = TextDataObject.Factory.CreateFromDefault(TempClientLoginToken);
-            if (gameDataObject != null)
-            {
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(peerParams.ID, gameDataObject);
-                NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
-            }
-        }
-
-        private void ProcessClientConnect(GameRecvObject gameRecvObject)
-        {
-            PeerParams peerParams = gameRecvObject.PeerParams;
-
-            // If new connection passed valid checksum, add to Clients dict.
-            if (Checksums.Contains(gameRecvObject.Data))
-            {
-                Console.WriteLine("[CONNECT] Client successfully connected (ID: {0}), Address: {1}:{2}, Checksum: {3}",
-                    gameRecvObject.PeerParams.ID,
-                    gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
-                    gameRecvObject.Data);
-
-                //Checksums.Remove(gameRecvObject.Data);
-
-                // Create new Connection and add to Clients map.
-                Connection connection = new(peerParams.ID, peerParams.IP, peerParams.Port, false);
-                Clients[peerParams.ID] = connection;
-
-                // Prompt client to send login token on next message.
-                GameDataObject? textDataObject = TextDataObject.Factory.CreateFromDefault(
-                    "Client must send full login token as next message.");
-                if (textDataObject != null)
-                {
-                    GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(connection.ID, textDataObject);
-                    NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
-                }
-            }
-            // Else force disconnect immediately.
-            else
-            {
-                Console.WriteLine("[ERROR] Invalid new connection from {0}:{1} - checksum failed. Checksum: {2}",
-                    peerParams.IP, peerParams.Port, gameRecvObject.Data);
-
-                // Data uint of 1000 indicates client validation error.
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(peerParams.ID, 1000);
-                NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
-            }
-        }
-
-        #endregion
-
-        #region Message processing
-
-        private void ProcessMasterServerMessage(GameRecvObject gameRecvObject)
-        {
-            // READ LOGINDATAOBJECT AND ADD TO BOTH HASH SETS
-        }
-
-        private void ProcessGameServerMessage(GameRecvObject gameRecvObject)
-        {
-            Console.WriteLine("[MESSAGE] Message received from server (ID: {0}), Address: {1}:{2}, Message: {3}",
+                Console.WriteLine("[MESSAGE] Client message (ID: {0}), Address: {1}:{2}, Message: {3}",
                     gameRecvObject.PeerParams.ID,
                     gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
                     gameRecvObject.GameDataObject?.GetDescription());
-        }
-
-        private void ProcessClientMessage(GameRecvObject gameRecvObject)
-        {
-            Console.WriteLine("[MESSAGE] Message received from client (ID: {0}), Address: {1}:{2}, Message: {3}",
-                    gameRecvObject.PeerParams.ID,
-                    gameRecvObject.PeerParams.IP, gameRecvObject.PeerParams.Port,
-                    gameRecvObject.GameDataObject?.GetDescription());
-        }
-
-        private void ProcessClientTokenVerification(GameDataObject? gameDataObject, PeerParams peerParams, Connection connection)
-        {
-            bool success = false;
-            if (gameDataObject != null && gameDataObject.DataType == DataType.Text)
-            {
-                // Safe to hard cast here because DataType is guaranteed to match actual derived object type.
-                TextDataObject textDataObject = (TextDataObject)gameDataObject;
-
-                // Set success to true if successfully removed (existed in map).
-                if (/*LoginTokens.Remove(textDataObject.String*/LoginTokens.Contains(textDataObject.String))
-                {
-                    success = true;
-                }
-            }
-
-            // Validate client and send ACK if successful, else log failure and disconnect client.
-            if (success)
-            {
-                Console.WriteLine("[CONNECT] Client passed login validation check (ID: {0})",
-                    peerParams.ID);
-                connection.Validate();
-
-                // Send message to client informing it that it is now fully connected.
-                GameDataObject? textDataObject = TextDataObject.Factory.CreateFromDefault(
-                    "Successfully validated connection.");
-                if (textDataObject != null)
-                {
-                    GameSendObject gameSendObject = GameSendObject.Factory.CreateMessageOne(connection.ID, textDataObject);
-                    NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
-                }
-            }
-            else
-            {
-                Console.WriteLine("[DISCONNECT] Client failed validation check, disconnecting (ID: {0})",
-                    peerParams.ID);
-
-                // Remove clients from map and disconnect this client, data uint 1000u means validation error.
-                Clients.Remove(peerParams.ID, out _);
-                GameSendObject gameSendObject = GameSendObject.Factory.CreateDisconnectOne(peerParams.ID, 1000u);
-                NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
             }
         }
 
