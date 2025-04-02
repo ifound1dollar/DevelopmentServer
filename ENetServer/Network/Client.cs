@@ -580,13 +580,22 @@ namespace ENetServer.Network
             if (!string.IsNullOrEmpty(str)) // TEMP NOT ACTUAL VALIDATION
             {
                 Servers[peer.ID] = peer;
-            }
 
-            // Enqueue connect object with new peer's Connection for use by other threads.
-            PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                peerParams, 101u);
-            netRecvQueue.Enqueue(dataObject);
+                // Enqueue connect object with new peer's Connection for use by other threads.
+                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                    peerParams, 101u);
+                netRecvQueue.Enqueue(dataObject);
+            }
+            else
+            {
+                Console.WriteLine("[ERROR] Error in validation ACK, disconnecting (ID: {0})", peer.ID);
+
+                // Immediately disconnect from server, data uint 1000u means client validation error.
+                peer.DisconnectNow(1000u);
+                return;
+            }
+            
         }
 
         #endregion

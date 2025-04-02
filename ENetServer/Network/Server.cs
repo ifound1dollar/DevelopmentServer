@@ -727,18 +727,18 @@ namespace ENetServer.Network
                 // Add to PendingServers, which is needed for proper validation behavior.
                 PendingServers.Add(peer);
 
-                // Initial connection successful, so must send over login ack immediately.
+                // Initial connection successful, so must send over login token immediately.
                 string token = "1f8fad5bd9cb469fa16570867728950e";
                 token = NetStatics.FormatStringForSend(token);
 
-                // Create packet with login ack and send.
+                // Create packet with login token and send.
                 Packet packet = default;
                 packet.Create(NetStatics.GetBytes(token));
                 peer.Send(0, ref packet);
             }
             else
             {
-                // If new connection passes valid checksum, consider preliminary connection.
+                // If new connection passes valid checksum, make preliminary connection.
                 if (/*Checksums.Remove(connectEvent.Data)*/Checksums.Contains(connectEvent.Data))
                 {
                     // Add new Peer to AllPeers, awaiting validation message.
@@ -750,7 +750,7 @@ namespace ENetServer.Network
                     Console.WriteLine("[ERROR] Invalid new connection from {0}:{1} - checksum failed. Checksum: {2}",
                         peer.IP, peer.Port, connectEvent.Data);
 
-                    // Data uint of 1001 indicates server validation error.
+                    // Data uint of 1001u indicates server validation error.
                     peer.DisconnectNow(1001u);
                 }
                 
@@ -761,7 +761,7 @@ namespace ENetServer.Network
         {
             Peer peer = connectEvent.Peer;
 
-            // If new connection passes valid checksum, consider preliminary connection.
+            // If new connection passes valid checksum, make preliminary connection.
             if (/*Checksums.Remove(connectEvent.Data)*/Checksums.Contains(connectEvent.Data))
             {
                 // Add new client to AllPeers, but NOT valid connection maps yet.
@@ -811,13 +811,13 @@ namespace ENetServer.Network
             // The initiating client will have sent a connect request, received a connect response,
             //  then sent over its login ack with validation being handled here.
             // This method processes an unvalidated message from another server. It will either
-            //  send back a 'verification success' ACK back to the initiating server, or will
+            //  send a 'verification success' ACK back to the initiating server, or will
             //  interpret this message as the ACK (depending on whether this Peer is pending or
             //  not).
             // If is pending, then this is the initiating server that is waiting for the ACK, so
             //  check whether this message is in correct ACK format.
-            // Else this is the receiving server, so actually verify the login ack to fully
-            //  validate the other server. Sends back a validation ACK if successful ack.
+            // Else this is the receiving server, so actually verify the login ACK to fully
+            //  validate the other server. Sends back a validation ACK if successful token.
 
             Peer peer = receiveEvent.Peer;
 
@@ -876,7 +876,7 @@ namespace ENetServer.Network
                 }
                 else
                 {
-                    Console.WriteLine("[DISCONNECT] Server failed validation check, disconnecting (ID: {0})",
+                    Console.WriteLine("[ERROR] Server failed validation check, disconnecting (ID: {0})",
                         peer.ID);
 
                     // Immediately disconnect this server, data uint 1001u means validation error.
