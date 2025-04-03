@@ -44,7 +44,7 @@ namespace ENetServer.Network
         /// Map of all servers this client is connected to in form ID:Peer.
         /// </summary>
         private Dictionary<uint, Peer> Servers { get; } = new();
-        private HashSet<Peer> AllPeers { get; } = new();
+        private HashSet<Peer> InitiatedPeers { get; } = new();
 
         internal Address GetAddress()
         {
@@ -324,7 +324,7 @@ namespace ENetServer.Network
                 if (pendingPeer != null)
                 {
                     pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
-                    AllPeers.Add(pendingPeer.Value);
+                    InitiatedPeers.Add(pendingPeer.Value);
                 }
             }
             catch (InvalidOperationException ex)
@@ -466,7 +466,7 @@ namespace ENetServer.Network
         {
             // If new connection is from another client, immediately disconnect that Peer.
             // OR if new connection is not in AllPeers (meaning this client did not initiate), disconnect.
-            if (connectEvent.Peer.Port >= ClientPortMin || !AllPeers.Contains(connectEvent.Peer))
+            if (connectEvent.Peer.Port >= ClientPortMin || !InitiatedPeers.Contains(connectEvent.Peer))
             {
                 connectEvent.Peer.Disconnect(2000u);    // Data of 2000u indicates invalid new connection.
             }
@@ -532,7 +532,7 @@ namespace ENetServer.Network
             Peer peer = connectEvent.Peer;
 
             // Add new server to AllPeers, but NOT valid Servers map yet.
-            AllPeers.Add(peer);
+            InitiatedPeers.Add(peer);
 
             // Client must immediately send login token as raw data to server to validate connection.
             string token = "0f8fad5bd9cb469fa16570867728950e";

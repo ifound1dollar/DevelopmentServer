@@ -384,7 +384,7 @@ namespace ENetServer
                 // Wait for the Run() function to return, then join the thread (BLOCKS).
                 Console.WriteLine("[EXIT] Waiting for client to shut down...");
                 thread.Join();
-                Console.WriteLine("[EXIT] Server shut down successfully.");
+                Console.WriteLine("[EXIT] Client shut down successfully.");
             }
 
             /// <summary>
