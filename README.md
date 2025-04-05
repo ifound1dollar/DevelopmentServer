@@ -24,6 +24,23 @@ Each example class starts the NetworkManager as a client or server, starts the G
 
 ---
 
+## Connection Validation
+
+The network thread implements robust connection validation to allow/reject/blacklist Peers. This is a multi-step process, automatically removing and blacklisting Peers which attempt to connect but fail validation. It is designed to only allow Peers which send a valid preliminary checksum and then immediately send a valid full login token. The server should maintain a connection to a Master Server, which will message the server before a Peer attempts to connect and pass it the Peer's temporary login token. Any Peer that attempts to connect must know its valid login token which has been previously communicated by the Master Server. This login token is used by the server to generate a ValidationData struct, which contains a non-cryptographically-secure 32-bit checksum of the full login token for initial connection validation (as well as the full login token and an expiration DateTime). Peers must calculate and send this checksum as raw data on connection attempt, then immediately send the full login token if this preliminary connection is successful. If validation fails for any reason (invalid checksum, invalid login token, or expired validation data), the Peer is immediately force disconnected by the server and blacklisted for an exponentially-increasing duration based on number of failed attemtps. A Peer is completely removed from the blacklist any time it successfully connects.
+
+The connection process is as follows:
+
+1. Peer (server or client) sends an initial connect request to a remote host, passing a 32-bit checksum generated from the full login token.
+2. Remote host (server) receives this connection request and compares the received checksum against its map of current awaiting validation data (this server should have received a message previously from an existing trusted connection containing a login token for this expected new connection). If the checksum passes, the server adds the Peer to a map of Peers awaiting validation and waits for the Peer to send its full login token.
+3. The Peer receives an automatic 'connection success' response from the initial non-validated connection, instructing it to immediately send its full login token as raw data to the server.
+4. The server receives this login token and compares it against the same map of validation data. If the token is valid, the server adds the Peer to a final-stage pending Peers map and sends the Peer a 'validation success' ACK.
+5. The Peer receives this validation ACK and knows that the connection has been successfully made. It adds the server to its list of valid connections, then sends the server a response ACK which acknowledges that it successfully received the validation ACK.
+6. Finally, the server receives this final response ACK and can now consider the connection fully valid. It removes the Peer from the final-stage pending Peers map and adds it to the map of fully-connected Peers. The server waits for this final ACK to finalize the connection (instead of immediately after login token validation success) to ensure that the Peer is ready to accept messages before actually sending them. Otherwise, the server may send a regular message while the Peer is still in its 'pending' state, in which the Peer will reject the connection because it is expecting a specifically-formatted ACK message (not a regular message).
+
+
+
+---
+
 ## Performance Documentation
 
 The below section contains performance documentation from tests during development. This is measured in round-trip test send operations, in which new GameDataObjects are passed along from main/game->serialize->net, then back from net->serialize->main/game (without actually sending). This tests the inter-system performance. All tests below were run with 10,000,000 Text GameDataObjects created and enqueued, then waited for all to return through the system.

@@ -46,6 +46,8 @@ namespace ENetServer.Network
         private Dictionary<uint, Peer> Servers { get; } = new();
         private HashSet<Peer> InitiatedPeers { get; } = new();
 
+        private Dictionary<string, string> OutgoingTokens { get; } = new(); // for login tokens we send
+
         internal Address GetAddress()
         {
             return address;
@@ -472,7 +474,7 @@ namespace ENetServer.Network
             }
 
             // Else new connection was from a server, so handle new server connection.
-            ProcessGameServerConnect(ref connectEvent);
+            ProcessIncomingConnection(ref connectEvent);
         }
 
         private void HandleDisconnectEvent(ref Event disconnectEvent)
@@ -517,15 +519,20 @@ namespace ENetServer.Network
         {
             Peer peer = receiveEvent.Peer;
 
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
             // If message received from Peer which is not in map, this client is not validated.
             if (!Servers.ContainsKey(peer.ID))
             {
-                ProcessGameServerValidationResponse(ref receiveEvent);
+                ProcessValidationAck(ref peer, bytes, length);
             }
             // Else is in map (validated), so enqueue as normal message.
             else
             {
-                ProcessGameServerMessage(ref receiveEvent);
+                ProcessRegularMessage(ref peer, bytes, length);
             }
 
             // Always dispose packet after handling receive, even if did not enqueue NetRecvObject.
@@ -536,78 +543,77 @@ namespace ENetServer.Network
 
         #region Connect processing
 
-        private void ProcessGameServerConnect(ref Event connectEvent)
+        private void ProcessIncomingConnection(ref Event connectEvent)
         {
             Peer peer = connectEvent.Peer;
 
             // New connection is guaranteed to have been self-initiated (clients disallow incoming connections).
-            InitiatedPeers.Add(peer);
+            if (InitiatedPeers.Contains(peer))
+            {
+                // Client must immediately send login token as raw data to server to validate connection.
+                string token = "0f8fad5bd9cb469fa16570867728950e";
+                token = NetStatics.FormatStringForSend(token);
 
-            // Client must immediately send login token as raw data to server to validate connection.
-            string token = "0f8fad5bd9cb469fa16570867728950e";
-            token = NetStatics.FormatStringForSend(token);
+                // Create packet with login token and send.
+                Packet packet = default;
+                packet.Create(NetStatics.GetBytes(token));
+                peer.Send(0, ref packet);
 
-            // Create packet with login token and send.
-            Packet packet = default;
-            packet.Create(NetStatics.GetBytes(token));
-            peer.Send(0, ref packet);
+                return;
+            }
+
+            // Else new connection from unknown Peer, so disconnect immediately.
+            Console.WriteLine("[ERROR] Rejecting new connection from {0}:{1}, Reason: Unknown Peer",
+                peer.IP, peer.Port);
+            peer.DisconnectNow(2000u);  // Data 2000u is for generic disallowed connection
         }
 
         #endregion
 
         #region Message processing
 
-        private void ProcessGameServerMessage(ref Event receiveEvent)
+        private void ProcessRegularMessage(ref Peer peer, byte[] bytes, int length)
         {
-            Peer peer = receiveEvent.Peer;
-
-            // Copy packet payload into byte[].
-            int length = receiveEvent.Packet.Length;
-            byte[] bytes = new byte[length];
-            receiveEvent.Packet.CopyTo(bytes);
-
             // Enqueue NetRecvObject with this peer's data.
             PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
             NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerParams, bytes, length);
             netRecvQueue.Enqueue(dataObject);
         }
 
-        private void ProcessGameServerValidationResponse(ref Event receiveEvent)
+        private void ProcessValidationAck(ref Peer peer, byte[] bytes, int length)
         {
-            Peer peer = receiveEvent.Peer;
-
-            // Copy packet payload into byte[].
-            int length = receiveEvent.Packet.Length;
-            byte[] bytes = new byte[length];
-            receiveEvent.Packet.CopyTo(bytes);
-
-            // Get login token from raw packet data, then check whether is a valid token.
+            // Get ACK from packet.
             string str = NetStatics.GetString(bytes, 0, length);
             str = NetStatics.FormatStringFromReceive(str);
 
             // If validation response contains expected data, add Peer to map (now valid)
-            if (!string.IsNullOrEmpty(str)) // TODO: PERFORM ACTUAL ACK MESSAGE VALIDATION
+            if (str.Equals("Login token validation successful."))   // TODO: PERFORM ACTUAL ACK MESSAGE VALIDATION
             {
                 // Remove from preliminary HashSet, and add to fully-connected map.
                 InitiatedPeers.Remove(peer);
                 Servers[peer.ID] = peer;
+
+                // Create packet with response ACK and send.
+                string ack = NetStatics.FormatStringForSend("Validation ACK received successfully.");
+                Packet packet = default;
+                packet.Create(NetStatics.GetBytes(ack));
+                peer.Send(0, ref packet);
 
                 // Enqueue connect object with new peer's Connection for use by other threads.
                 PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
                     peerParams, 101u);
                 netRecvQueue.Enqueue(dataObject);
-            }
-            else
-            {
-                Console.WriteLine("[ERROR] Failed connection to {0}:{1}, Reason: Received invalid connection ACK",
-                    peer.IP, peer.Port);
 
-                // Data uint 1200u means client ACK error, which is always called by initiator (this)
-                //  so is always client.
-                peer.DisconnectNow(1200u);
+                return;
             }
-            
+
+            // Else validation ACK was not expected, so log failure and disconnect.
+            Console.WriteLine("[ERROR] Failed connection to {0}:{1}, Reason: Received invalid connection ACK",
+                peer.IP, peer.Port);
+            // Data uint 1200u means client ACK error, which is always called by initiator (this)
+            //  so is always client.
+            peer.DisconnectNow(1200u);
         }
 
         #endregion

@@ -46,10 +46,13 @@ namespace ENetServer.Network
         private Dictionary<uint, Peer> AllConnected { get; } = new();
         private HashSet<Peer> InitiatedPeers { get; } = new();
         private HashSet<Peer> AwaitingPeers { get; } = new();
+        private HashSet<Peer> PendingAckPeers { get; } = new();
 
         private Peer? MasterServer { get; set; } = null;
-        private Dictionary<string, ValidationData> ValidationMap { get; } = new();
         private Dictionary<string, BlacklistData> BlacklistMap { get; } = new();
+        private Dictionary<string, ValidationData> ValidationMap { get; } = new();
+
+        private Dictionary<string, string> OutgoingTokens { get; } = new(); // for login tokens we send
 
         internal Address GetAddress()
         {
@@ -564,11 +567,11 @@ namespace ENetServer.Network
             // Else, handle new connection.
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
-                ProcessClientConnect(ref peer, key, connectEvent.Data);
+                ProcessIncomingConnection(ref peer, key, connectEvent.Data, isServer: false);
             }
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
-                ProcessGameServerConnect(ref peer, key, connectEvent.Data);
+                ProcessIncomingConnection(ref peer, key, connectEvent.Data, isServer: true);
             }
             else if (peer.Port == 7776)                     // Master Server port should be 7776.
             {
@@ -680,28 +683,28 @@ namespace ENetServer.Network
 
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
-                // If received from client which is not in map, is not yet validated.
                 if (!Clients.ContainsKey(peer.ID))
                 {
-                    ProcessClientTokenVerification(ref peer, bytes, length);
+                    // If received from client which is not in map, is not yet validated.
+                    ProcessValidation(ref peer, bytes, length, isServer: false);
                 }
-                // Else is in map (validated), so enqueue as normal message.
                 else
                 {
-                    ProcessClientMessage(ref peer, bytes, length);
+                    // Else is in map (validated), so enqueue as normal message.
+                    ProcessRegularMessage(ref peer, bytes, length, isServer: false);
                 }
             }
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
-                // If received from server which is not in map, is not yet validated.
                 if (!Servers.ContainsKey(peer.ID))
                 {
-                    ProcessGameServerTokenVerification(ref peer, bytes, length);
+                    // If received from server which is not in map, is not yet validated.
+                    ProcessValidation(ref peer, bytes, length, isServer: true);
                 }
-                // Else is in map (validated), so enqueue as normal message.
                 else
                 {
-                    ProcessGameServerMessage(ref peer, bytes, length);
+                    // Else is in map (validated), so enqueue as normal message.
+                    ProcessRegularMessage(ref peer, bytes, length, isServer: true);
                 }
             }
             else if (peer.Port == 7776)                     // Master Server port should be 7776.
@@ -740,16 +743,12 @@ namespace ENetServer.Network
             }
         }
 
-        private void ProcessGameServerConnect(ref Peer peer, string key, uint inChecksum)
+        private void ProcessIncomingConnection(ref Peer peer, string key, uint inChecksum, bool isServer)
         {
             // If Peer is in InitiatedPeers, then this server was the initiator of the attempted
             //  connection (added to InitiatedPeers on connection request send).
-            // Else, this server is receiving an initial connection attempt (totally new Peer).
             if (InitiatedPeers.Contains(peer))
             {
-                // Add to InitiatedPeers, which contains Peers with prelim connections which we initiated.
-                InitiatedPeers.Add(peer);
-
                 // Initial connection successful, so must send over login token immediately.
                 string token = "1f8fad5bd9cb469fa16570867728950e";
                 token = NetStatics.FormatStringForSend(token);
@@ -759,6 +758,7 @@ namespace ENetServer.Network
                 packet.Create(NetStatics.GetBytes(token));
                 peer.Send(0, ref packet);
             }
+            // Else, this server is receiving an initial connection attempt (totally new Peer).
             else
             {
                 // If new connection passes valid checksum, make preliminary connection.
@@ -775,27 +775,8 @@ namespace ENetServer.Network
 
                 // If either of the above branches fail, blacklist and force disconnect immediately.
                 BlacklistPeer(ref peer, key);
-                DisconnectOnChecksumFail(ref peer, isServer: true);
+                DisconnectOnChecksumFail(ref peer, isServer: isServer);
             }
-        }
-
-        private void ProcessClientConnect(ref Peer peer, string key, uint inChecksum)
-        {
-            // If new connection passes valid checksum, make preliminary connection.
-            if (ValidationMap.TryGetValue(key, out ValidationData validationData))
-            {
-                if (validationData.CompareChecksum(inChecksum))
-                {
-                    // Add new Peer to AwaitingPeers, awaiting login token.
-                    AwaitingPeers.Add(peer);
-
-                    return;
-                }
-            }
-
-            // If either of the above branches fail, blacklist and force disconnect immediately.
-            BlacklistPeer(ref peer, key);
-            DisconnectOnChecksumFail(ref peer, isServer: false);
         }
 
         #endregion
@@ -807,19 +788,12 @@ namespace ENetServer.Network
             // READ DATA IN EXPECTED STRUCTURE AND ADD TO BOTH HASH SETS
         }
 
-        private void ProcessGameServerMessage(ref Peer peer, byte[] bytes, int length)
+        private void ProcessRegularMessage(ref Peer peer, byte[] bytes, int length, bool isServer)
         {
-            // Enqueue NetRecvObject with this peer's data.
-            PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
-                peerParams, bytes, length);
-            netRecvQueue.Enqueue(dataObject);
-        }
+            HostType hostType = (isServer) ? HostType.Server : HostType.Client;
 
-        private void ProcessClientMessage(ref Peer peer, byte[] bytes, int length)
-        {
             // Enqueue NetRecvObject with this peer's data.
-            PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
+            PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
             NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
                 peerParams, bytes, length);
             netRecvQueue.Enqueue(dataObject);
@@ -827,66 +801,93 @@ namespace ENetServer.Network
 
         #endregion
 
-        #region Token processing
+        #region Validation processing
 
-        private void ProcessGameServerTokenVerification(ref Peer peer, byte[] bytes, int length)
+        private void ProcessValidation(ref Peer peer, byte[] bytes, int length, bool isServer)
         {
-            // NOTE: This method is the first to be called in a server->server connection attempt,
-            //  specifically when the connected-to server receives a message from a server Peer
-            //  which is not yet in the Servers map.
-            // The initiating client will have sent a connect request, received a connect response,
-            //  then sent over its login ack with validation being handled here.
-            // This method processes an unvalidated message from another server. It will either
-            //  send a 'verification success' ACK back to the initiating server, or will
-            //  interpret this message as the ACK (depending on whether this Peer is pending or
-            //  not).
-            // If is pending, then this is the initiating server that is waiting for the ACK, so
-            //  check whether this message is in correct ACK format.
-            // Else this is the receiving server, so actually verify the login ACK to fully
-            //  validate the other server. Sends back a validation ACK if successful token.
-
-            // Get EITHER login ack OR validation ACK from packet.
+            // Get raw string payload from packet, which could be an ACK or a login token.
             string str = NetStatics.GetString(bytes, 0, length);
             str = NetStatics.FormatStringFromReceive(str);
 
             // If we are initiator, this first message should be validation ACK.
-            if (InitiatedPeers.Remove(peer))
+            if (InitiatedPeers.Remove(peer))        // Outgoing only
             {
-                GameServerAckAsInitiator(ref peer, responseString: str);
+                ProcessAckAsInitiator(ref peer, responseString: str, isServer: isServer);
             }
-            // Else is not initiator and is awaiting login token, so should verify login token.
-            else if (AwaitingPeers.Remove(peer))
+            // Else if not initiator and is awaiting login token, so should verify login token.
+            else if (AwaitingPeers.Remove(peer))    // Incoming only
             {
-                GameServerTokenAsAwaiting(ref peer, tokenString: str);
+                ProcessTokenAsAwaiting(ref peer, tokenString: str, isServer: isServer);
             }
-
-            // COULD THEORETICALLY REACH HERE IF MESSAGE RECEIVED IS NOT IN EITHER MAP
+            // Else if pending Peer is validated but has not yet returned ACK (must return our ACK).
+            else if (PendingAckPeers.Remove(peer))  // Incoming only
+            {
+                ProcessFinalAckResponse(ref peer, ackString: str, isServer: isServer);
+            }
+            // ELSE IS NOT IN ANY MAP, SO RECEIVED MESSAGE FROM UNKNOWN CONNECTION
+            else
+            {
+                Console.WriteLine("Not in any map");
+            }
         }
 
-        private void GameServerAckAsInitiator(ref Peer peer, string responseString)
+        private void ProcessAckAsInitiator(ref Peer peer, string responseString, bool isServer)
         {
+            // NOTE: This method will only ever be called when processing a connection we initiated.
+            // As initiator (having sent connection request and received successful response), we
+            //  automatically sent our login token immediately after receiving the successful
+            //  connect response.
+            // Our first message received from the server, if login token validation was successful,
+            //  will be a validation ACK noting that it was successful. We must verify that this
+            //  ACK is correct, and if so, we are considered fully connected to the remote server.
+            // We must send a response ACK which acknowledges that we received the validation ACK
+            //  to fully complete the connection process. The server must know that we received
+            //  the validation ACK and are ready to receive data.
+
+            Dictionary<uint, Peer> connectionDict = (isServer) ? Servers : Clients;
+            HostType hostType = (isServer) ? HostType.Server : HostType.Client;
+
             // If validation response contains expected ACK data, add Peer to maps (now valid)
-            if (!string.IsNullOrEmpty(responseString)) // TODO: COMPARE ACTUAL VALIDATION ACK MESSAGE
+            if (responseString.Equals("Login token validation successful."))    // TODO: COMPARE ACTUAL VALIDATION ACK MESSAGE
             {
-                // Remove from preliminary HashSet, and add to fully-connected maps.
-                InitiatedPeers.Remove(peer);
-                Servers[peer.ID] = peer;
+                // Add Peer to fully-connected maps (already removed from preliminary HashSet).
+                connectionDict[peer.ID] = peer;
                 AllConnected[peer.ID] = peer;
 
+                // Create packet with response ACK and send.
+                string ack = NetStatics.FormatStringForSend("Validation ACK received successfully.");
+                Packet packet = default;
+                packet.Create(NetStatics.GetBytes(ack));
+                peer.Send(0, ref packet);
+
                 // Validation has fully completed, so enqueue successful connect object.
-                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
                     peerParams, 101u);
                 netRecvQueue.Enqueue(dataObject);
+
+                return;
             }
-            else
-            {
-                DisconnectOnAckFail(ref peer);
-            }
+
+            // Disconnect on validation ACK failure, but DO NOT blacklist (we are the initiator).
+            DisconnectOnAckFail(ref peer, isServer);
         }
 
-        private void GameServerTokenAsAwaiting(ref Peer peer, string tokenString)
+        private void ProcessTokenAsAwaiting(ref Peer peer, string tokenString, bool isServer)
         {
+            // NOTE: This method will only ever be called when processing an incoming connection.
+            // When a Peer is awaiting, it has completed an initial connection with a successful
+            //  checksum validation, but we are awaiting the full login token to be sent by this
+            //  awaiting Peer.
+            // The Peer's first message must be raw login token data, which will be compared
+            //  against the awaiting ValidationData (if it exists).
+            // If the login token validation is successful, we must send a validation ACK to the
+            //  Peer to notify it that it passed validation and should consider itself fully
+            //  connected.
+            // NOTE: We must await an response ACK from the Peer acknowledging that they received
+            //  the validation ACK before we fully consider the connection fully completed on our
+            //  end.
+
             string key = NetStatics.GetAddressString(peer.IP, peer.Port);
 
             // If new connection contains valid login token, complete connection.
@@ -894,10 +895,8 @@ namespace ENetServer.Network
             {
                 if (validationData.CompareLoginToken(tokenString))
                 {
-                    // Remove from preliminary HashSet, and add to fully-connected maps.
-                    AwaitingPeers.Remove(peer);
-                    Servers[peer.ID] = peer;
-                    AllConnected[peer.ID] = peer;
+                    // Add this Peer to pending ACK map so it can be handled later.
+                    PendingAckPeers.Add(peer);
 
                     // Create packet with validation ACK and send.
                     string ack = NetStatics.FormatStringForSend("Login token validation successful.");
@@ -905,13 +904,7 @@ namespace ENetServer.Network
                     packet.Create(NetStatics.GetBytes(ack));
                     peer.Send(0, ref packet);
 
-                    // Validation has fully completed, so enqueue successful connect object.
-                    PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                        peerParams, 100u);
-                    netRecvQueue.Enqueue(dataObject);
-
-                    // Remove server from Blacklist and Validation maps now that connection is made.
+                    // Remove Peer from Blacklist and Validation maps now that connection is made.
                     BlacklistMap.Remove(key);
                     //ValidationMap.Remove(key);
 
@@ -921,61 +914,38 @@ namespace ENetServer.Network
 
             // If either of the above branches fail, blacklist and force disconnect immediately.
             BlacklistPeer(ref peer, key);
-            DisconnectOnLoginTokenFail(ref peer, isServer: true);
+            DisconnectOnLoginTokenFail(ref peer, isServer);
         }
 
-        private void ProcessClientTokenVerification(ref Peer peer, byte[] bytes, int length)
+        private void ProcessFinalAckResponse(ref Peer peer, string ackString, bool isServer)
         {
-            // Get login token from raw packet data, then check whether is a valid token.
-            string loginToken = NetStatics.GetString(bytes, 0, length);
-            loginToken = NetStatics.FormatStringFromReceive(loginToken);
+            // NOTE: This method will only ever be called when processing an incoming connection.
+            // Remote host must return an ACK which acknowledges that it received our original
+            //  post-token-validation ACK. Only once this final ACK is received, we consider
+            //  the connection 'official', adding the Peer to fully-connected maps. And
+            //  enqueuing a successful connect object.
 
-            // Remove this Peer from awaiting HashSet and validate connection if successful.
-            if (AwaitingPeers.Remove(peer))
+            Dictionary<uint, Peer> connectionDict = (isServer) ? Servers : Clients;
+            HostType hostType = (isServer) ? HostType.Server : HostType.Client;
+
+            // If return ACK response contains expected ACK data, add Peer to maps (now valid)
+            if (ackString.Equals("Validation ACK received successfully."))  // TODO: COMPARE ACTUAL RETURN ACK MESSAGE
             {
-                ClientTokenAsAwaiting(ref peer, loginToken);
+                // Add Peer to fully-connected maps (already removed from preliminary HashSet).
+                connectionDict[peer.ID] = peer;
+                AllConnected[peer.ID] = peer;
+
+                // Validation has fully completed, so enqueue successful connect object.
+                PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
+                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                    peerParams, 100u);
+                netRecvQueue.Enqueue(dataObject);
+
+                return;
             }
-
-            // COULD THEORETICALLY REACH HERE IF MESSAGE RECEIVED IS NOT IN AWAITING MAP
-        }
-
-        private void ClientTokenAsAwaiting(ref Peer peer, string tokenString)
-        {
-            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
-
-            // If new connection contains valid login token, complete connection.
-            if (ValidationMap.TryGetValue(key, out ValidationData validationData))
-            {
-                if (validationData.CompareLoginToken(tokenString))
-                {
-                    // Remove from preliminary HashSet, and add to fully-connected maps.
-                    AwaitingPeers.Remove(peer);
-                    Clients[peer.ID] = peer;
-                    AllConnected[peer.ID] = peer;
-
-                    // Create packet with validation ACK and send.
-                    string ack = NetStatics.FormatStringForSend("Login token validation successful.");
-                    Packet packet = default;
-                    packet.Create(NetStatics.GetBytes(ack));
-                    peer.Send(0, ref packet);
-
-                    // Validation has fully completed, so enqueue successful connect object.
-                    PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                        peerParams, 100u);
-                    netRecvQueue.Enqueue(dataObject);
-
-                    // Remove client from Blacklist and Validation maps now that connection is made.
-                    BlacklistMap.Remove(key);
-                    //ValidationMap.Remove(key);
-
-                    return;
-                }
-            }
-
-            // If either of the above branches fail, blacklist and force disconnect immediately.
-            BlacklistPeer(ref peer, key);
-            DisconnectOnLoginTokenFail(ref peer, isServer: false);
+            
+            // Disconnect on returned ACK failure, but do not blacklist (did not fail validation).
+            DisconnectOnAckFail(ref peer, isServer);
         }
 
         #endregion
@@ -1008,14 +978,14 @@ namespace ENetServer.Network
             peer.DisconnectNow(data);
         }
 
-        private static void DisconnectOnAckFail(ref Peer peer)
+        private static void DisconnectOnAckFail(ref Peer peer, bool isServer)
         {
             Console.WriteLine("[ERROR] Failed connection to {0}:{1}, Reason: Received invalid connection ACK",
                 peer.IP, peer.Port);
 
-            // Data uint 1201u means server ACK error, which is always called by initiator (this)
-            //  so is always server.
-            peer.DisconnectNow(1201u);
+            // Data uint 1200u means server ACK error, 1201u means server.
+            uint data = isServer ? 1201u : 1200u;
+            peer.DisconnectNow(data);
         }
 
         private void BlacklistPeer(ref Peer peer, string key)
