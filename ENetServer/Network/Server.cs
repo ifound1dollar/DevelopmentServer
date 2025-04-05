@@ -48,8 +48,8 @@ namespace ENetServer.Network
         private HashSet<Peer> AwaitingPeers { get; } = new();
 
         private Peer? MasterServer { get; set; } = null;
-        private HashSet<uint> Checksums { get; } = [ 7777u, 8888u ];
-        private HashSet<string> LoginTokens { get; } = [ "0f8fad5bd9cb469fa16570867728950e", "1f8fad5bd9cb469fa16570867728950e"];
+        private Dictionary<string, ValidationData> ValidationMap { get; } = new();
+        private Dictionary<string, BlacklistData> BlacklistMap { get; } = new();
 
         internal Address GetAddress()
         {
@@ -94,6 +94,15 @@ namespace ENetServer.Network
             //  EVENT DISPATCHED ONCE LOOP STARTS
             // IF WAIT FOR CONNECTION HERE: remove master server connect check from connect receive
             //  method. ELSE IF NOT WAITING FOR CONNECTION, leave master server connect check.
+
+            // TODO: REMOVE TEMPORARY POPULATE VALIDATION MAP WITH DATA
+            ValidationMap["127.0.0.1:8888"] = new ValidationData("127.0.0.1", 8888, "0f8fad5bd9cb469fa16570867728950e");
+            ValidationMap["127.0.0.1:8889"] = new ValidationData("127.0.0.1", 8889, "0f8fad5bd9cb469fa16570867728950e");
+            ValidationMap["127.0.0.1:8890"] = new ValidationData("127.0.0.1", 8890, "0f8fad5bd9cb469fa16570867728950e");
+
+            ValidationMap["127.0.0.1:7777"] = new ValidationData("127.0.0.1", 7777, "1f8fad5bd9cb469fa16570867728950e");
+            ValidationMap["127.0.0.1:7778"] = new ValidationData("127.0.0.1", 7778, "1f8fad5bd9cb469fa16570867728950e");
+            ValidationMap["127.0.0.1:7779"] = new ValidationData("127.0.0.1", 7779, "1f8fad5bd9cb469fa16570867728950e");
         }
 
         /// <summary>
@@ -538,18 +547,32 @@ namespace ENetServer.Network
         private void HandleConnectEvent(ref Event connectEvent)
         {
             Peer peer = connectEvent.Peer;
+            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
 
+            // FIRST, verify that new connection is not currently blacklisted.
+            if (BlacklistMap.TryGetValue(key, out BlacklistData blacklistData))
+            {
+                // If connected client is still blacklisted, immediately disconnect.
+                if (blacklistData.IsCurrentlyBlacklisted())
+                {
+                    DisconnectOnBlacklist(ref peer);
+
+                    return;
+                }
+            }
+
+            // Else, handle new connection.
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
-                ProcessClientConnect(ref connectEvent);
+                ProcessClientConnect(ref peer, key, connectEvent.Data);
             }
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
-                ProcessGameServerConnect(ref connectEvent);
+                ProcessGameServerConnect(ref peer, key, connectEvent.Data);
             }
             else if (peer.Port == 7776)                     // Master Server port should be 7776.
             {
-                ProcessMasterServerConnect(ref connectEvent);
+                ProcessMasterServerConnect(ref peer, key, connectEvent.Data);
             }
             else
             {
@@ -560,6 +583,13 @@ namespace ENetServer.Network
         private void HandleDisconnectEvent(ref Event disconnectEvent)
         {
             Peer peer = disconnectEvent.Peer;
+
+            // If was in InitiatedPeers, then validation failed and server forced a disconnect.
+            if (InitiatedPeers.Remove(peer))
+            {
+                Console.WriteLine("[ERROR] Failed to connect to server at address {0}:{1}, Code: {2}",
+                    peer.IP, peer.Port, disconnectEvent.Data);
+            }
 
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
@@ -643,17 +673,22 @@ namespace ENetServer.Network
         {
             Peer peer = receiveEvent.Peer;
 
+            // Copy packet payload into byte[].
+            int length = receiveEvent.Packet.Length;
+            byte[] bytes = new byte[length];
+            receiveEvent.Packet.CopyTo(bytes);
+
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
                 // If received from client which is not in map, is not yet validated.
                 if (!Clients.ContainsKey(peer.ID))
                 {
-                    ProcessClientTokenVerification(ref receiveEvent);
+                    ProcessClientTokenVerification(ref peer, bytes, length);
                 }
                 // Else is in map (validated), so enqueue as normal message.
                 else
                 {
-                    ProcessClientMessage(ref receiveEvent);
+                    ProcessClientMessage(ref peer, bytes, length);
                 }
             }
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
@@ -661,17 +696,17 @@ namespace ENetServer.Network
                 // If received from server which is not in map, is not yet validated.
                 if (!Servers.ContainsKey(peer.ID))
                 {
-                    ProcessGameServerTokenVerification(ref receiveEvent);
+                    ProcessGameServerTokenVerification(ref peer, bytes, length);
                 }
                 // Else is in map (validated), so enqueue as normal message.
                 else
                 {
-                    ProcessGameServerMessage(ref receiveEvent);
+                    ProcessGameServerMessage(ref peer, bytes, length);
                 }
             }
             else if (peer.Port == 7776)                     // Master Server port should be 7776.
             {
-                ProcessMasterServerMessage(ref receiveEvent);
+                ProcessMasterServerMessage(ref peer, bytes, length);
             }
             else
             {
@@ -686,35 +721,31 @@ namespace ENetServer.Network
 
         #region Connect processing
 
-        private void ProcessMasterServerConnect(ref Event connectEvent)
+        private void ProcessMasterServerConnect(ref Peer peer, string key, uint inChecksum)
         {
-            Peer peer = connectEvent.Peer;
             if (MasterServer == null)
             {
                 Console.WriteLine("[CONNECT] Successfully connected to master server (ID: {0}), Address {1}:{2}",
                 peer.ID, peer.IP, peer.Port);
 
                 // Set MasterServer Peer.
-                MasterServer = connectEvent.Peer;
+                MasterServer = peer;
             }
             else
             {
                 Console.WriteLine("[ERROR] Invalid new connection on port 7776 - MasterServer connection already exists.");
 
-                // Data uint of 1006 indicates master server validation error.
-                peer.DisconnectNow(1006u);
+                // Data uint of 1500u indicates master server connection error.
+                peer.DisconnectNow(1500u);
             }
         }
 
-        private void ProcessGameServerConnect(ref Event connectEvent)
+        private void ProcessGameServerConnect(ref Peer peer, string key, uint inChecksum)
         {
             // If Peer is in InitiatedPeers, then this server was the initiator of the attempted
             //  connection (added to InitiatedPeers on connection request send).
             // Else, this server is receiving an initial connection attempt (totally new Peer).
-            Peer peer = connectEvent.Peer;
-            bool isInitiator = InitiatedPeers.Contains(peer);
-
-            if (isInitiator)
+            if (InitiatedPeers.Contains(peer))
             {
                 // Add to InitiatedPeers, which contains Peers with prelim connections which we initiated.
                 InitiatedPeers.Add(peer);
@@ -731,63 +762,53 @@ namespace ENetServer.Network
             else
             {
                 // If new connection passes valid checksum, make preliminary connection.
-                if (/*Checksums.Remove(connectEvent.Data)*/Checksums.Contains(connectEvent.Data))
+                if (ValidationMap.TryGetValue(key, out ValidationData validationData))
                 {
-                    // Add new Peer to AwaitingPeers, awaiting login token.
-                    AwaitingPeers.Add(peer);
-                }
-                // Else force disconnect immediately.
-                else
-                {
-                    Console.WriteLine("[ERROR] Invalid new connection from {0}:{1} - checksum failed. Checksum: {2}",
-                        peer.IP, peer.Port, connectEvent.Data);
+                    if (validationData.CompareChecksum(inChecksum))
+                    {
+                        // Add new Peer to AwaitingPeers, awaiting login token.
+                        AwaitingPeers.Add(peer);
 
-                    // Data uint of 1001u indicates server validation error.
-                    peer.DisconnectNow(1001u);
+                        return;
+                    }
                 }
-                
+
+                // If either of the above branches fail, blacklist and force disconnect immediately.
+                BlacklistPeer(ref peer, key);
+                DisconnectOnChecksumFail(ref peer, isServer: true);
             }
         }
 
-        private void ProcessClientConnect(ref Event connectEvent)
+        private void ProcessClientConnect(ref Peer peer, string key, uint inChecksum)
         {
-            Peer peer = connectEvent.Peer;
-
             // If new connection passes valid checksum, make preliminary connection.
-            if (/*Checksums.Remove(connectEvent.Data)*/Checksums.Contains(connectEvent.Data))
+            if (ValidationMap.TryGetValue(key, out ValidationData validationData))
             {
-                // Add new client to AwaitingPeers, as we are awaiting login token from this client Peer.
-                AwaitingPeers.Add(peer);
-            }
-            // Else force disconnect immediately.
-            else
-            {
-                Console.WriteLine("[ERROR] Invalid new connection from {0}:{1} - checksum failed. Checksum: {2}",
-                    peer.IP, peer.Port, connectEvent.Data);
+                if (validationData.CompareChecksum(inChecksum))
+                {
+                    // Add new Peer to AwaitingPeers, awaiting login token.
+                    AwaitingPeers.Add(peer);
 
-                // Data uint of 1000u indicates client validation error.
-                peer.DisconnectNow(1000u);
+                    return;
+                }
             }
+
+            // If either of the above branches fail, blacklist and force disconnect immediately.
+            BlacklistPeer(ref peer, key);
+            DisconnectOnChecksumFail(ref peer, isServer: false);
         }
 
         #endregion
 
         #region Message processing
 
-        private void ProcessMasterServerMessage(ref Event receiveEvent)
+        private void ProcessMasterServerMessage(ref Peer peer, byte[] bytes, int length)
         {
             // READ DATA IN EXPECTED STRUCTURE AND ADD TO BOTH HASH SETS
         }
 
-        private void ProcessGameServerMessage(ref Event receiveEvent)
+        private void ProcessGameServerMessage(ref Peer peer, byte[] bytes, int length)
         {
-            Peer peer = receiveEvent.Peer;
-
-            // Copy packet payload into byte[].
-            int length = receiveEvent.Packet.Length;
-            byte[] bytes = new byte[length];
-            receiveEvent.Packet.CopyTo(bytes);
-
             // Enqueue NetRecvObject with this peer's data.
             PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
             NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
@@ -795,7 +816,20 @@ namespace ENetServer.Network
             netRecvQueue.Enqueue(dataObject);
         }
 
-        private void ProcessGameServerTokenVerification(ref Event receiveEvent)
+        private void ProcessClientMessage(ref Peer peer, byte[] bytes, int length)
+        {
+            // Enqueue NetRecvObject with this peer's data.
+            PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
+                peerParams, bytes, length);
+            netRecvQueue.Enqueue(dataObject);
+        }
+
+        #endregion
+
+        #region Token processing
+
+        private void ProcessGameServerTokenVerification(ref Peer peer, byte[] bytes, int length)
         {
             // NOTE: This method is the first to be called in a server->server connection attempt,
             //  specifically when the connected-to server receives a message from a server Peer
@@ -811,13 +845,6 @@ namespace ENetServer.Network
             // Else this is the receiving server, so actually verify the login ACK to fully
             //  validate the other server. Sends back a validation ACK if successful token.
 
-            Peer peer = receiveEvent.Peer;
-
-            // Copy packet payload into byte[].
-            int length = receiveEvent.Packet.Length;
-            byte[] bytes = new byte[length];
-            receiveEvent.Packet.CopyTo(bytes);
-
             // Get EITHER login ack OR validation ACK from packet.
             string str = NetStatics.GetString(bytes, 0, length);
             str = NetStatics.FormatStringFromReceive(str);
@@ -825,38 +852,55 @@ namespace ENetServer.Network
             // If we are initiator, this first message should be validation ACK.
             if (InitiatedPeers.Remove(peer))
             {
-                // If validation response contains expected ACK data, add Peer to maps (now valid)
-                if (!string.IsNullOrEmpty(str)) // TEMP NOT ACTUAL VALIDATION
-                {
-                    Servers[peer.ID] = peer;
-                    AllConnected[peer.ID] = peer;
-
-                    // Validation has fully completed, so enqueue successful connect object.
-                    PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                        peerParams, 101u);
-                    netRecvQueue.Enqueue(dataObject);
-                }
-                else
-                {
-                    Console.WriteLine("[ERROR] Error in validation ACK, disconnecting (ID: {0})", peer.ID);
-
-                    // Immediately disconnect this server, data uint 1001u means validation error.
-                    peer.DisconnectNow(1001u);
-                    return;
-                }
+                GameServerAckAsInitiator(ref peer, responseString: str);
             }
             // Else is not initiator and is awaiting login token, so should verify login token.
             else if (AwaitingPeers.Remove(peer))
             {
-                if (/*LoginTokens.Remove(textDataObject.String*/LoginTokens.Contains(str))
+                GameServerTokenAsAwaiting(ref peer, tokenString: str);
+            }
+
+            // COULD THEORETICALLY REACH HERE IF MESSAGE RECEIVED IS NOT IN EITHER MAP
+        }
+
+        private void GameServerAckAsInitiator(ref Peer peer, string responseString)
+        {
+            // If validation response contains expected ACK data, add Peer to maps (now valid)
+            if (!string.IsNullOrEmpty(responseString)) // TODO: COMPARE ACTUAL VALIDATION ACK MESSAGE
+            {
+                // Remove from preliminary HashSet, and add to fully-connected maps.
+                InitiatedPeers.Remove(peer);
+                Servers[peer.ID] = peer;
+                AllConnected[peer.ID] = peer;
+
+                // Validation has fully completed, so enqueue successful connect object.
+                PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
+                NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                    peerParams, 101u);
+                netRecvQueue.Enqueue(dataObject);
+            }
+            else
+            {
+                DisconnectOnAckFail(ref peer);
+            }
+        }
+
+        private void GameServerTokenAsAwaiting(ref Peer peer, string tokenString)
+        {
+            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
+
+            // If new connection contains valid login token, complete connection.
+            if (ValidationMap.TryGetValue(key, out ValidationData validationData))
+            {
+                if (validationData.CompareLoginToken(tokenString))
                 {
-                    // If valid login token, this Peer is now fully connected, so add to maps.
+                    // Remove from preliminary HashSet, and add to fully-connected maps.
+                    AwaitingPeers.Remove(peer);
                     Servers[peer.ID] = peer;
                     AllConnected[peer.ID] = peer;
 
                     // Create packet with validation ACK and send.
-                    string ack = NetStatics.FormatStringForSend("Server validation successful.");
+                    string ack = NetStatics.FormatStringForSend("Login token validation successful.");
                     Packet packet = default;
                     packet.Create(NetStatics.GetBytes(ack));
                     peer.Send(0, ref packet);
@@ -866,79 +910,124 @@ namespace ENetServer.Network
                     NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
                         peerParams, 100u);
                     netRecvQueue.Enqueue(dataObject);
-                }
-                else
-                {
-                    Console.WriteLine("[ERROR] Server failed validation check, disconnecting (ID: {0})",
-                        peer.ID);
 
-                    // Immediately disconnect this server, data uint 1001u means validation error.
-                    peer.DisconnectNow(1001u);
+                    // Remove server from Blacklist and Validation maps now that connection is made.
+                    BlacklistMap.Remove(key);
+                    //ValidationMap.Remove(key);
+
                     return;
                 }
             }
+
+            // If either of the above branches fail, blacklist and force disconnect immediately.
+            BlacklistPeer(ref peer, key);
+            DisconnectOnLoginTokenFail(ref peer, isServer: true);
         }
 
-        private void ProcessClientMessage(ref Event receiveEvent)
+        private void ProcessClientTokenVerification(ref Peer peer, byte[] bytes, int length)
         {
-            Peer peer = receiveEvent.Peer;
-
-            // Copy packet payload into byte[].
-            int length = receiveEvent.Packet.Length;
-            byte[] bytes = new byte[length];
-            receiveEvent.Packet.CopyTo(bytes);
-
-            // Enqueue NetRecvObject with this peer's data.
-            PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
-                peerParams, bytes, length);
-            netRecvQueue.Enqueue(dataObject);
-        }
-
-        private void ProcessClientTokenVerification(ref Event receiveEvent)
-        {
-            Peer peer = receiveEvent.Peer;
-
-            // Copy packet payload into byte[].
-            int length = receiveEvent.Packet.Length;
-            byte[] bytes = new byte[length];
-            receiveEvent.Packet.CopyTo(bytes);
-
             // Get login token from raw packet data, then check whether is a valid token.
-            string str = NetStatics.GetString(bytes, 0, length);
-            str = NetStatics.FormatStringFromReceive(str);
+            string loginToken = NetStatics.GetString(bytes, 0, length);
+            loginToken = NetStatics.FormatStringFromReceive(loginToken);
 
             // Remove this Peer from awaiting HashSet and validate connection if successful.
             if (AwaitingPeers.Remove(peer))
             {
-                if (/*LoginTokens.Remove(textDataObject.String*/LoginTokens.Contains(str))
+                ClientTokenAsAwaiting(ref peer, loginToken);
+            }
+
+            // COULD THEORETICALLY REACH HERE IF MESSAGE RECEIVED IS NOT IN AWAITING MAP
+        }
+
+        private void ClientTokenAsAwaiting(ref Peer peer, string tokenString)
+        {
+            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
+
+            // If new connection contains valid login token, complete connection.
+            if (ValidationMap.TryGetValue(key, out ValidationData validationData))
+            {
+                if (validationData.CompareLoginToken(tokenString))
                 {
-                    // If valid login token, this Peer is now fully connected so add to maps.
+                    // Remove from preliminary HashSet, and add to fully-connected maps.
+                    AwaitingPeers.Remove(peer);
                     Clients[peer.ID] = peer;
                     AllConnected[peer.ID] = peer;
 
                     // Create packet with validation ACK and send.
-                    string ack = NetStatics.FormatStringForSend("Server validation successful.");
+                    string ack = NetStatics.FormatStringForSend("Login token validation successful.");
                     Packet packet = default;
                     packet.Create(NetStatics.GetBytes(ack));
                     peer.Send(0, ref packet);
 
-                    // Enqueue successful connect and pass to main/game thread.
+                    // Validation has fully completed, so enqueue successful connect object.
                     PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
-                    NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromConnect(peerParams, 100u);
-                    netRecvQueue.Enqueue(netRecvObject);
-                }
-                else
-                {
-                    Console.WriteLine("[DISCONNECT] Client failed validation check, disconnecting (ID: {0})",
-                        peer.ID);
+                    NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
+                        peerParams, 100u);
+                    netRecvQueue.Enqueue(dataObject);
 
-                    // Immediately disconnect this client, data uint 1000u means validation error.
-                    peer.DisconnectNow(1000u);
+                    // Remove client from Blacklist and Validation maps now that connection is made.
+                    BlacklistMap.Remove(key);
+                    //ValidationMap.Remove(key);
+
+                    return;
                 }
             }
+
+            // If either of the above branches fail, blacklist and force disconnect immediately.
+            BlacklistPeer(ref peer, key);
+            DisconnectOnLoginTokenFail(ref peer, isServer: false);
         }
 
         #endregion
+
+        private static void DisconnectOnBlacklist(ref Peer peer)
+        {
+            Console.WriteLine("[ERROR] Rejecting new connection from {0}:{1}, Reason: Blacklisted address",
+                        peer.IP, peer.Port);
+
+            peer.DisconnectNow(3000u);
+        }
+
+        private static void DisconnectOnChecksumFail(ref Peer peer, bool isServer)
+        {
+            Console.WriteLine("[ERROR] Rejecting new connection from {0}:{1}, Reason: Checksum validation failed",
+                peer.IP, peer.Port);
+
+            // Data uint 1000u means client checksum error, 1001u means server.
+            uint data = isServer ? 1001u : 1000u;
+            peer.DisconnectNow(data);
+        }
+
+        private static void DisconnectOnLoginTokenFail(ref Peer peer, bool isServer)
+        {
+            Console.WriteLine("[ERROR] Rejecting new connection from {0}:{1}, Reason: Login token validation failed",
+                        peer.IP, peer.Port);
+
+            // Data uint 1100u means client login token validation error, 1101u means server.
+            uint data = isServer ? 1101u : 1100u;
+            peer.DisconnectNow(data);
+        }
+
+        private static void DisconnectOnAckFail(ref Peer peer)
+        {
+            Console.WriteLine("[ERROR] Failed connection to {0}:{1}, Reason: Received invalid connection ACK",
+                peer.IP, peer.Port);
+
+            // Data uint 1201u means server ACK error, which is always called by initiator (this)
+            //  so is always server.
+            peer.DisconnectNow(1201u);
+        }
+
+        private void BlacklistPeer(ref Peer peer, string key)
+        {
+            if (BlacklistMap.TryGetValue(key, out BlacklistData blacklistData))
+            {
+                blacklistData.Reblacklist();
+            }
+            else
+            {
+                BlacklistMap[key] = new BlacklistData(peer.IP, peer.Port);
+            }
+        }
     }
 }

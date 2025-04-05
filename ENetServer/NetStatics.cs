@@ -18,9 +18,43 @@ namespace ENetServer
         public enum RecvType { None, Connect, Disconnect, Timeout, Message }
 
 
+
         public static ushort ServerPortMin { get; } = 7777;
         public static ushort ClientPortMin { get; } = 8888;
 
+
+
+        #region HashMap helpers
+
+        /// <summary>
+        /// Gets a combined string from an IP address and Port number, to be used as a
+        ///  hash code.
+        /// </summary>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
+        /// <returns> The IP address and Port combined into a string formatted as "[ip]:[port]". </returns>
+        public static string GetAddressString(string ip, ushort port)
+        {
+            return ip + ":" + port;
+        }
+
+        /// <summary>
+        /// Calculates an unsigned 32-bit checksum from a string of arbitrary size.
+        /// </summary>
+        /// <param name="read"> The string to hash. </param>
+        /// <returns> The passed-in string as a non-cryptographically-secure uint hash. </returns>
+        public static uint CalculateChecksum(string read)
+        {
+            uint hashedValue = 57;
+            for (int i = 0; i < read.Length; i++)
+            {
+                hashedValue += read[i];
+                hashedValue *= 57;
+            }
+            return hashedValue;
+        }
+
+        #endregion
 
         #region String and Packet Helpers
 
@@ -220,7 +254,7 @@ namespace ENetServer
 
 
 
-        ///             NETWORK DATA CODES
+        ///             NETWORK DATA (STATUS) CODES
         /// 100  | Successful peer-initiated connection
         /// 101  | Successful self-initiated connection
         /// 200  | Peer-initiated disconnect
@@ -228,9 +262,14 @@ namespace ENetServer
         /// 300  | Peer-initiated disconnect on shutdown
         /// 301  | Self-initiated disconnect on shutdown
         /// 400  | Timeout
-        /// 1000 | Client validation error
-        /// 1001 | Server validation error
-        /// 1006 | Master server connection error
-        /// 2000 | Disallowed new connection error
+        /// 1000 | Client checksum validation error
+        /// 1001 | Server checksum validation error
+        /// 1100 | Client login token validation error
+        /// 1101 | Server login token validation error
+        /// 1200 | Client validation ACK error
+        /// 1201 | Server validation ACK error
+        /// 1500 | Master server connection error
+        /// 2000 | Disallowed new connection
+        /// 3000 | Rejected blacklisted address
     }
 }

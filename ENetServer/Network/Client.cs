@@ -477,8 +477,17 @@ namespace ENetServer.Network
 
         private void HandleDisconnectEvent(ref Event disconnectEvent)
         {
+            Peer peer = disconnectEvent.Peer;
+
+            // If was in InitiatedPeers, then validation failed and server forced a disconnect.
+            if (InitiatedPeers.Remove(peer))
+            {
+                Console.WriteLine("[ERROR] Failed to connect to server at address {0}:{1}, Code: {2}",
+                    peer.IP, peer.Port, disconnectEvent.Data);
+            }
+
             // Remove Peer from map and enqueue if successful.
-            if (Servers.Remove(disconnectEvent.Peer.ID, out Peer peer))
+            if (Servers.Remove(peer.ID))
             {
                 // If Data uint is 0, then event is an automatic ACK from disconnect initialized here.
                 uint data = (disconnectEvent.Data == 0) ? 201u : disconnectEvent.Data;
@@ -531,7 +540,7 @@ namespace ENetServer.Network
         {
             Peer peer = connectEvent.Peer;
 
-            // Add new server to AllPeers, but NOT valid Servers map yet.
+            // New connection is guaranteed to have been self-initiated (clients disallow incoming connections).
             InitiatedPeers.Add(peer);
 
             // Client must immediately send login token as raw data to server to validate connection.
@@ -577,8 +586,10 @@ namespace ENetServer.Network
             str = NetStatics.FormatStringFromReceive(str);
 
             // If validation response contains expected data, add Peer to map (now valid)
-            if (!string.IsNullOrEmpty(str)) // TEMP NOT ACTUAL VALIDATION
+            if (!string.IsNullOrEmpty(str)) // TODO: PERFORM ACTUAL ACK MESSAGE VALIDATION
             {
+                // Remove from preliminary HashSet, and add to fully-connected map.
+                InitiatedPeers.Remove(peer);
                 Servers[peer.ID] = peer;
 
                 // Enqueue connect object with new peer's Connection for use by other threads.
@@ -589,11 +600,12 @@ namespace ENetServer.Network
             }
             else
             {
-                Console.WriteLine("[ERROR] Error in validation ACK, disconnecting (ID: {0})", peer.ID);
+                Console.WriteLine("[ERROR] Failed connection to {0}:{1}, Reason: Received invalid connection ACK",
+                    peer.IP, peer.Port);
 
-                // Immediately disconnect from server, data uint 1000u means client validation error.
-                peer.DisconnectNow(1000u);
-                return;
+                // Data uint 1200u means client ACK error, which is always called by initiator (this)
+                //  so is always client.
+                peer.DisconnectNow(1200u);
             }
             
         }

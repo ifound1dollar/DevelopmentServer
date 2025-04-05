@@ -161,7 +161,9 @@ namespace ClientExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, 8888u);
+            // Test client login token: 0f8fad5bd9cb469fa16570867728950e
+            uint hashCode = NetStatics.CalculateChecksum("0f8fad5bd9cb469fa16570867728950e");
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, hashCode);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 

@@ -13,6 +13,11 @@ namespace ServerExample
 
         static void Main(string[] args)
         {
+            //string s = "0f8fad5bd9cb469fa16570867728950e";
+            //Console.WriteLine((uint)s.GetHashCode());
+            //s = "1f8fad5bd9cb469fa16570867728950e";
+            //Console.WriteLine((uint)s.GetHashCode());
+
             // Wrap entire main function in try-catch-finally to ensure ENet is deinitialized at exit.
             try
             {
@@ -173,7 +178,9 @@ namespace ServerExample
                 }
             }
 
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, 7777u);
+            // Test server login token: 1f8fad5bd9cb469fa16570867728950e
+            uint hashCode = NetStatics.CalculateChecksum("1f8fad5bd9cb469fa16570867728950e");
+            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, hashCode);
             NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
         }
 

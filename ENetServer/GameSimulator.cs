@@ -28,8 +28,6 @@ namespace ENetServer
         public ConcurrentDictionary<uint, Connection> Servers { get; } = new();
         public ConcurrentDictionary<uint, Connection> Connected { get; } = new();
 
-        private string TempClientLoginToken { get; } = "0f8fad5bd9cb469fa16570867728950e";
-
         public GameSimulatorWorker()
         {
             thread = new(DoFixedIntervalTick);
