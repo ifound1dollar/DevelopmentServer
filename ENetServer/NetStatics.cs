@@ -39,17 +39,21 @@ namespace ENetServer
         }
 
         /// <summary>
-        /// Calculates an unsigned 32-bit checksum from a string of arbitrary size.
+        /// Calculates an unsigned 32-bit checksum from a string of arbitrary size, using the
+        ///  Knuth hashing algorithm.
         /// </summary>
         /// <param name="read"> The string to hash. </param>
         /// <returns> The passed-in string as a non-cryptographically-secure uint hash. </returns>
         public static uint CalculateChecksum(string read)
         {
-            uint hashedValue = 57;
+            // See accepted comment here for details on Knuth hash:
+            //  https://stackoverflow.com/questions/9545619/a-fast-hash-function-for-string-in-c-sharp
+
+            uint hashedValue = 59;  // Should use a sufficiently large prime number in the future.
             for (int i = 0; i < read.Length; i++)
             {
                 hashedValue += read[i];
-                hashedValue *= 57;
+                hashedValue *= 59;
             }
             return hashedValue;
         }
@@ -270,6 +274,7 @@ namespace ENetServer
         /// 1201 | Server validation ACK error
         /// 1500 | Master server connection error
         /// 2000 | Disallowed new connection
+        /// 2500 | Disconnect on message from unknown Peer
         /// 3000 | Rejected blacklisted address
     }
 }

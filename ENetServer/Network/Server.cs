@@ -41,12 +41,10 @@ namespace ENetServer.Network
         /// <summary>
         /// Map of all connected clients in form ID:Peer.
         /// </summary>
-        private Dictionary<uint, Peer> Clients { get; } = new();
-        private Dictionary<uint, Peer> Servers { get; } = new();
-        private Dictionary<uint, Peer> AllConnected { get; } = new();
-        private HashSet<Peer> InitiatedPeers { get; } = new();
-        private HashSet<Peer> AwaitingPeers { get; } = new();
-        private HashSet<Peer> PendingAckPeers { get; } = new();
+        private Dictionary<uint, PeerData> Clients { get; } = new();
+        private Dictionary<uint, PeerData> Servers { get; } = new();
+        private Dictionary<uint, PeerData> AllConnected { get; } = new();
+        private Dictionary<string, PeerData> PendingPeers { get; } = new();
 
         private Peer? MasterServer { get; set; } = null;
         private Dictionary<string, BlacklistData> BlacklistMap { get; } = new();
@@ -131,13 +129,13 @@ namespace ENetServer.Network
         private void DisconnectAllOnStop(Host serverHost)
         {
             // Disconnect all peers before disposing server (graceful disconnects).
-            foreach (var peer in Clients)
+            foreach (var peerData in Clients)
             {
                 // Verify that the peer is valid.
-                if (peer.Value.State != PeerState.Connected) continue;
+                if (peerData.Value.Peer.State != PeerState.Connected) continue;
 
                 // Disconnect with uint 300u, sending peer-initiated disconnect on host shutdown.
-                peer.Value.Disconnect(300u);    // Is received by peer.
+                peerData.Value.Peer.Disconnect(300u);   // Is received by peer.
             }
 
             // Wait 3 seconds for clients to respond to disconnect request.
@@ -322,17 +320,17 @@ namespace ENetServer.Network
             ushort port = netSendObject.PeerParams.Port;
 
             // Verify port is within valid range (outbound connections can only ever be to servers).
-            if (port < 7776 || port >= ClientPortMin)
+            if (port < ServerPortMin || port >= ClientPortMin)
             {
                 Console.WriteLine("[ERROR] Specified port out of range for new Connect attempt. Valid range: {0}-{1}",
-                    7776, ClientPortMin - 1);
+                    ServerPortMin, ClientPortMin - 1);
                 return;
             }
 
             // Verify not trying to connect to a Host already connected to.
-            foreach (var peer in AllConnected)
+            foreach (var peerData in AllConnected)
             {
-                if (peer.Value.IP == ip && peer.Value.Port == port)
+                if (peerData.Value.Peer.IP == ip && peerData.Value.Peer.Port == port)
                 {
                     Console.WriteLine("[ERROR] Cannot connect to an existing Connection. Aborting.");
                     return;
@@ -351,7 +349,11 @@ namespace ENetServer.Network
                 if (pendingPeer != null)
                 {
                     pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
-                    InitiatedPeers.Add(pendingPeer.Value);
+                    
+                    // Add this peer to pending peers.
+                    string key = NetStatics.GetAddressString(netSendObject.PeerParams.IP, netSendObject.PeerParams.Port);
+                    PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
+                    PendingPeers[key] = peerData;
                 }
             }
             catch (InvalidOperationException ex)
@@ -367,13 +369,13 @@ namespace ENetServer.Network
         internal void QueueDisconnectOne(NetSendObject netSendObject)
         {
             // Only if a peer with this ID is found.
-            if (AllConnected.TryGetValue(netSendObject.PeerParams.ID, out Peer peer))
+            if (AllConnected.TryGetValue(netSendObject.PeerParams.ID, out PeerData? peerData))
             {
-                // Verify that the peer is valid.
-                if (peer.State != PeerState.Connected) return;
+                // Verify that the peer is valid (using ENet PeerState here).
+                if (peerData.Peer.State != PeerState.Connected) return;
 
                 // Disconnect with data value.
-                peer.Disconnect(netSendObject.Data);
+                peerData.Peer.Disconnect(netSendObject.Data);
             }
         }
 
@@ -387,13 +389,13 @@ namespace ENetServer.Network
             foreach (var id in netSendObject.PeerParams.IDArray)
             {
                 // Only if a peer with this ID is found.
-                if (AllConnected.TryGetValue(id, out Peer peer))
+                if (AllConnected.TryGetValue(id, out PeerData? peerData))
                 {
-                    // Verify that the peer is valid.
-                    if (peer.State != PeerState.Connected) return;
+                    // Verify that the peer is valid (using ENet PeerState here).
+                    if (peerData.Peer.State != PeerState.Connected) return;
 
                     // Disconnect with data value.
-                    peer.Disconnect(netSendObject.Data);
+                    peerData.Peer.Disconnect(netSendObject.Data);
                 }
             }
         }
@@ -406,7 +408,7 @@ namespace ENetServer.Network
         internal void QueueDisconnectAll(NetSendObject netSendObject)
         {
             // Use HostType to determine which map to iterate over.
-            Dictionary<uint, Peer> dict;
+            Dictionary<uint, PeerData> dict;
             HostType hostType = netSendObject.PeerParams.HostType;
             switch (hostType)
             {
@@ -417,13 +419,13 @@ namespace ENetServer.Network
             }
 
             // Iterate over all Peers in map and disconnect if valid.
-            foreach (var peer in dict)
+            foreach (var peerData in dict)
             {
-                // Verify that the peer is valid.
-                if (peer.Value.State != PeerState.Connected) continue;
+                // Verify that the peer is valid (using ENet PeerState here).
+                if (peerData.Value.Peer.State != PeerState.Connected) continue;
 
                 // Disconnect with data value.
-                peer.Value.Disconnect(netSendObject.Data);
+                peerData.Value.Peer.Disconnect(netSendObject.Data);
             }
         }
 
@@ -441,13 +443,13 @@ namespace ENetServer.Network
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Only if a peer with this ID is found.
-            if (AllConnected.TryGetValue(netSendObject.PeerParams.ID, out Peer peer))
+            if (AllConnected.TryGetValue(netSendObject.PeerParams.ID, out PeerData? peerData))
             {
-                // Verify that the peer is valid.
-                if (peer.State != PeerState.Connected) return;
+                // Verify that the peer is valid (using ENet PeerState here).
+                if (peerData.Peer.State != PeerState.Connected) return;
 
                 // TEMP send on channel 0.
-                peer.Send(0, ref packet);
+                peerData.Peer.Send(0, ref packet);
             }
         }
 
@@ -465,13 +467,13 @@ namespace ENetServer.Network
             foreach (uint id in netSendObject.PeerParams.IDArray)
             {
                 // Only if a peer with this ID is found.
-                if (AllConnected.TryGetValue(id, out Peer peer))
+                if (AllConnected.TryGetValue(id, out PeerData? peerData))
                 {
-                    // Verify that the peer is valid.
-                    if (peer.State != PeerState.Connected) return;
+                    // Verify that the peer is valid (using ENet PeerState here).
+                    if (peerData.Peer.State != PeerState.Connected) return;
 
                     // TEMP send on channel 0.
-                    peer.Send(0, ref packet);
+                    peerData.Peer.Send(0, ref packet);
                 }
             }
         }
@@ -487,7 +489,7 @@ namespace ENetServer.Network
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Use HostType to determine which map to iterate over.
-            Dictionary<uint, Peer> dict;
+            Dictionary<uint, PeerData> dict;
             HostType hostType = netSendObject.PeerParams.HostType;
             switch (hostType)
             {
@@ -498,13 +500,13 @@ namespace ENetServer.Network
             }
 
             // Iterate over all elements in correct map, sending to each valid Peer.
-            foreach (var peer in dict)
+            foreach (var peerData in dict)
             {
-                // Verify that the peer is valid.
-                if (peer.Value.State != PeerState.Connected) continue;
+                // Verify that the peer is valid (using ENet PeerState here).
+                if (peerData.Value.Peer.State != PeerState.Connected) continue;
 
                 // TEMP send on channel 0.
-                peer.Value.Send(0, ref packet);
+                peerData.Value.Peer.Send(0, ref packet);
             }
         }
 
@@ -519,7 +521,7 @@ namespace ENetServer.Network
             packet.Create(netSendObject.Bytes, netSendObject.Length);
 
             // Use HostType to determine which map to iterate over.
-            Dictionary<uint, Peer> dict;
+            Dictionary<uint, PeerData> dict;
             HostType hostType = netSendObject.PeerParams.HostType;
             switch (hostType)
             {
@@ -530,16 +532,16 @@ namespace ENetServer.Network
             }
 
             // Iterate over all elements in correct map, sending to each valid Peer.
-            foreach (var peer in dict)
+            foreach (var peerData in dict)
             {
                 // Skipped passed-in peer ID.
-                if (peer.Key == netSendObject.PeerParams.ID) continue;
+                if (peerData.Value.Peer.ID == netSendObject.PeerParams.ID) continue;
 
                 // Verify that the peer is valid.
-                if (peer.Value.State != PeerState.Connected) continue;
+                if (peerData.Value.Peer.State != PeerState.Connected) continue;
 
                 // TEMP send on channel 0.
-                peer.Value.Send(0, ref packet);
+                peerData.Value.Peer.Send(0, ref packet);
             }
         }
 
@@ -586,9 +588,10 @@ namespace ENetServer.Network
         private void HandleDisconnectEvent(ref Event disconnectEvent)
         {
             Peer peer = disconnectEvent.Peer;
+            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
 
-            // If was in InitiatedPeers, then validation failed and server forced a disconnect.
-            if (InitiatedPeers.Remove(peer))
+            // If was in PendingPeers, then note failure to connect.
+            if (PendingPeers.Remove(key))
             {
                 Console.WriteLine("[ERROR] Failed to connect to server at address {0}:{1}, Code: {2}",
                     peer.IP, peer.Port, disconnectEvent.Data);
@@ -597,7 +600,7 @@ namespace ENetServer.Network
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
                 // Remove Peer from maps and enqueue if successful.
-                if (Clients.Remove(peer.ID, out _) || AllConnected.Remove(peer.ID, out _))
+                if (Clients.Remove(peer.ID) || AllConnected.Remove(peer.ID))
                 {
                     // If Data uint is 0, then event is an automatic ACK from disconnect initialized here.
                     uint data = (disconnectEvent.Data == 0) ? 201u : disconnectEvent.Data;
@@ -612,7 +615,7 @@ namespace ENetServer.Network
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
                 // Remove Peer from maps and enqueue if successful.
-                if (Servers.Remove(peer.ID, out _) || AllConnected.Remove(peer.ID, out _))
+                if (Servers.Remove(peer.ID) || AllConnected.Remove(peer.ID))
                 {
                     // If Data uint is 0, then event is an automatic ACK from disconnect initialized here.
                     uint data = (disconnectEvent.Data == 0) ? 201u : disconnectEvent.Data;
@@ -641,7 +644,7 @@ namespace ENetServer.Network
             if (peer.Port >= NetStatics.ClientPortMin)      // Client ports 8888+.
             {
                 // Remove Peer from maps and enqueue if successful.
-                if (Clients.Remove(peer.ID, out _) || AllConnected.Remove(peer.ID, out _))
+                if (Clients.Remove(peer.ID) || AllConnected.Remove(peer.ID))
                 {
                     // Enqueue disconnect object with disconnected peer's data for use by other threads.
                     PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
@@ -653,7 +656,7 @@ namespace ENetServer.Network
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
             {
                 // Remove Peer from maps and enqueue if successful.
-                if (Servers.Remove(peer.ID, out _) || AllConnected.Remove(peer.ID, out _))
+                if (Servers.Remove(peer.ID) || AllConnected.Remove(peer.ID))
                 {
                     // Enqueue disconnect object with disconnected peer's data for use by other threads.
                     PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
@@ -745,9 +748,31 @@ namespace ENetServer.Network
 
         private void ProcessIncomingConnection(ref Peer peer, string key, uint inChecksum, bool isServer)
         {
-            // If Peer is in InitiatedPeers, then this server was the initiator of the attempted
-            //  connection (added to InitiatedPeers on connection request send).
-            if (InitiatedPeers.Contains(peer))
+            // If this Peer not in PendingPeers, then is totally new connection so compare checksum.
+            if (!PendingPeers.TryGetValue(key, out PeerData? peerData))
+            {
+                // If new connection passes valid checksum, make preliminary connection.
+                if (ValidationMap.TryGetValue(key, out ValidationData validationData))
+                {
+                    if (validationData.CompareChecksum(inChecksum))
+                    {
+                        // Add new Peer to PendingPeers with AwaitingToken state.
+                        PeerData data = new(peer, PeerData.CustomState.AwaitingToken);
+                        PendingPeers.Add(key, data);
+
+                        return;
+                    }
+                }
+
+                // If either of the above branches fail, blacklist and force disconnect immediately.
+                BlacklistPeer(ref peer, key);
+                DisconnectOnChecksumFail(ref peer, isServer: isServer);
+
+                return;
+            }
+
+            // Else is in PendingPeers, and if Initiated by this server, immediately send full login token.
+            if (peerData.State == PeerData.CustomState.Initiated)
             {
                 // Initial connection successful, so must send over login token immediately.
                 string token = "1f8fad5bd9cb469fa16570867728950e";
@@ -758,25 +783,8 @@ namespace ENetServer.Network
                 packet.Create(NetStatics.GetBytes(token));
                 peer.Send(0, ref packet);
             }
-            // Else, this server is receiving an initial connection attempt (totally new Peer).
-            else
-            {
-                // If new connection passes valid checksum, make preliminary connection.
-                if (ValidationMap.TryGetValue(key, out ValidationData validationData))
-                {
-                    if (validationData.CompareChecksum(inChecksum))
-                    {
-                        // Add new Peer to AwaitingPeers, awaiting login token.
-                        AwaitingPeers.Add(peer);
 
-                        return;
-                    }
-                }
-
-                // If either of the above branches fail, blacklist and force disconnect immediately.
-                BlacklistPeer(ref peer, key);
-                DisconnectOnChecksumFail(ref peer, isServer: isServer);
-            }
+            // A new connection that exists in PendingPeers WITHOUT Initiated state should never happen.
         }
 
         #endregion
@@ -805,33 +813,38 @@ namespace ENetServer.Network
 
         private void ProcessValidation(ref Peer peer, byte[] bytes, int length, bool isServer)
         {
+            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
+
+            // If Peer does not exist in PendingPeers, then received message from unknown connection.
+            if (!PendingPeers.TryGetValue(key, out PeerData? peerData))
+            {
+                BlacklistPeer(ref peer, key);
+                DisconnectOnUnknownConnection(ref peer);
+                return;
+            }
+
             // Get raw string payload from packet, which could be an ACK or a login token.
             string str = NetStatics.GetString(bytes, 0, length);
             str = NetStatics.FormatStringFromReceive(str);
 
             // If we are initiator, this first message should be validation ACK.
-            if (InitiatedPeers.Remove(peer))        // Outgoing only
+            if (peerData.State == PeerData.CustomState.Initiated)           // Outgoing only
             {
-                ProcessAckAsInitiator(ref peer, responseString: str, isServer: isServer);
+                ProcessAckAsInitiator(ref peerData, key, responseString: str, isServer: isServer);
             }
             // Else if not initiator and is awaiting login token, so should verify login token.
-            else if (AwaitingPeers.Remove(peer))    // Incoming only
+            else if (peerData.State == PeerData.CustomState.AwaitingToken)  // Incoming only
             {
-                ProcessTokenAsAwaiting(ref peer, tokenString: str, isServer: isServer);
+                ProcessTokenAsAwaiting(ref peerData, key, tokenString: str, isServer: isServer);
             }
             // Else if pending Peer is validated but has not yet returned ACK (must return our ACK).
-            else if (PendingAckPeers.Remove(peer))  // Incoming only
+            else if (peerData.State == PeerData.CustomState.AwaitingAck)    // Incoming only
             {
-                ProcessFinalAckResponse(ref peer, ackString: str, isServer: isServer);
-            }
-            // ELSE IS NOT IN ANY MAP, SO RECEIVED MESSAGE FROM UNKNOWN CONNECTION
-            else
-            {
-                Console.WriteLine("Not in any map");
+                ProcessFinalAckResponse(ref peerData, key, ackString: str, isServer: isServer);
             }
         }
 
-        private void ProcessAckAsInitiator(ref Peer peer, string responseString, bool isServer)
+        private void ProcessAckAsInitiator(ref PeerData peerData, string key, string responseString, bool isServer)
         {
             // NOTE: This method will only ever be called when processing a connection we initiated.
             // As initiator (having sent connection request and received successful response), we
@@ -844,21 +857,24 @@ namespace ENetServer.Network
             //  to fully complete the connection process. The server must know that we received
             //  the validation ACK and are ready to receive data.
 
-            Dictionary<uint, Peer> connectionDict = (isServer) ? Servers : Clients;
+            Dictionary<uint, PeerData> connectionDict = (isServer) ? Servers : Clients;
             HostType hostType = (isServer) ? HostType.Server : HostType.Client;
+            Peer peer = peerData.Peer;
 
             // If validation response contains expected ACK data, add Peer to maps (now valid)
             if (responseString.Equals("Login token validation successful."))    // TODO: COMPARE ACTUAL VALIDATION ACK MESSAGE
             {
-                // Add Peer to fully-connected maps (already removed from preliminary HashSet).
-                connectionDict[peer.ID] = peer;
-                AllConnected[peer.ID] = peer;
+                // Add Peer to fully-connected maps, removing from PendingPeers and setting State.
+                PendingPeers.Remove(key);
+                peerData.State = PeerData.CustomState.Connected;
+                connectionDict[peer.ID] = peerData;
+                AllConnected[peer.ID] = peerData;
 
                 // Create packet with response ACK and send.
                 string ack = NetStatics.FormatStringForSend("Validation ACK received successfully.");
                 Packet packet = default;
                 packet.Create(NetStatics.GetBytes(ack));
-                peer.Send(0, ref packet);
+                peerData.Peer.Send(0, ref packet);
 
                 // Validation has fully completed, so enqueue successful connect object.
                 PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
@@ -873,7 +889,7 @@ namespace ENetServer.Network
             DisconnectOnAckFail(ref peer, isServer);
         }
 
-        private void ProcessTokenAsAwaiting(ref Peer peer, string tokenString, bool isServer)
+        private void ProcessTokenAsAwaiting(ref PeerData peerData, string key, string tokenString, bool isServer)
         {
             // NOTE: This method will only ever be called when processing an incoming connection.
             // When a Peer is awaiting, it has completed an initial connection with a successful
@@ -888,15 +904,15 @@ namespace ENetServer.Network
             //  the validation ACK before we fully consider the connection fully completed on our
             //  end.
 
-            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
+            Peer peer = peerData.Peer;
 
             // If new connection contains valid login token, complete connection.
             if (ValidationMap.TryGetValue(key, out ValidationData validationData))
             {
                 if (validationData.CompareLoginToken(tokenString))
                 {
-                    // Add this Peer to pending ACK map so it can be handled later.
-                    PendingAckPeers.Add(peer);
+                    // Update PeerData object's state to PendingAck (from PendingToken).
+                    peerData.State = PeerData.CustomState.AwaitingAck;
 
                     // Create packet with validation ACK and send.
                     string ack = NetStatics.FormatStringForSend("Login token validation successful.");
@@ -917,7 +933,7 @@ namespace ENetServer.Network
             DisconnectOnLoginTokenFail(ref peer, isServer);
         }
 
-        private void ProcessFinalAckResponse(ref Peer peer, string ackString, bool isServer)
+        private void ProcessFinalAckResponse(ref PeerData peerData, string key, string ackString, bool isServer)
         {
             // NOTE: This method will only ever be called when processing an incoming connection.
             // Remote host must return an ACK which acknowledges that it received our original
@@ -925,15 +941,18 @@ namespace ENetServer.Network
             //  the connection 'official', adding the Peer to fully-connected maps. And
             //  enqueuing a successful connect object.
 
-            Dictionary<uint, Peer> connectionDict = (isServer) ? Servers : Clients;
+            Dictionary<uint, PeerData> connectionDict = (isServer) ? Servers : Clients;
             HostType hostType = (isServer) ? HostType.Server : HostType.Client;
+            Peer peer = peerData.Peer;
 
             // If return ACK response contains expected ACK data, add Peer to maps (now valid)
             if (ackString.Equals("Validation ACK received successfully."))  // TODO: COMPARE ACTUAL RETURN ACK MESSAGE
             {
-                // Add Peer to fully-connected maps (already removed from preliminary HashSet).
-                connectionDict[peer.ID] = peer;
-                AllConnected[peer.ID] = peer;
+                // Add Peer to fully-connected maps, removing from PendingPeers and setting State.
+                PendingPeers.Remove(key);
+                peerData.State = PeerData.CustomState.Connected;
+                connectionDict[peer.ID] = peerData;
+                AllConnected[peer.ID] = peerData;
 
                 // Validation has fully completed, so enqueue successful connect object.
                 PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
@@ -983,9 +1002,18 @@ namespace ENetServer.Network
             Console.WriteLine("[ERROR] Failed connection to {0}:{1}, Reason: Received invalid connection ACK",
                 peer.IP, peer.Port);
 
-            // Data uint 1200u means server ACK error, 1201u means server.
+            // Data uint 1200u means client ACK error, 1201u means server.
             uint data = isServer ? 1201u : 1200u;
             peer.DisconnectNow(data);
+        }
+
+        private static void DisconnectOnUnknownConnection(ref Peer peer)
+        {
+            Console.WriteLine("[ERROR] Force disconnecting Peer at {0}:{1}, Reason: Message received from unknown Peer",
+                peer.IP, peer.Port);
+
+            // Data uint 2500u means message received from unknown Peer.
+            peer.DisconnectNow(2500u);
         }
 
         private void BlacklistPeer(ref Peer peer, string key)
