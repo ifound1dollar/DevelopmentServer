@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ENetServer.Network
 {
-    public readonly record struct ValidationData
+    public record ValidationData
     {
         public string IP { get; }
         public ushort Port { get; }

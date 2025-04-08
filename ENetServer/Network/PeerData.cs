@@ -7,12 +7,13 @@ using System.Threading.Tasks;
 
 namespace ENetServer.Network
 {
-    public class PeerData
+    public record PeerData
     {
         public enum CustomState { None, Initiated, AwaitingToken, AwaitingAck, Connected, Disconnected }
 
         private Peer _peer;
-        public ref Peer Peer => ref _peer;  // Use non-auto property to return Peer by reference.
+
+        public ref Peer Peer => ref _peer;      // Use non-auto property to return Peer by reference.
         public DateTime ConnectTime { get; }
         public CustomState State { get; set; }
 

@@ -60,7 +60,7 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="ip"> IP address of peer attempting to connect to. </param>
             /// <param name="port"> Port of peer attempting to connect to. </param>
-            /// <param name="data"> Data uint to send with connect request (initial checksum). </param>
+            /// <param name="data"> Optional data uint to send with connect request. </param>
             /// <returns> The newly created 'connect one' GameSendObject. </returns>
             public static GameSendObject CreateConnectOne(string ip, ushort port, uint data)
             {

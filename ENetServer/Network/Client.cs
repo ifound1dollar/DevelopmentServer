@@ -84,8 +84,13 @@ namespace ENetServer.Network
             clientHost.Create(address, peerLimit, channelLimit, 0u, 0u, 1024*1024);
 
             // Prevent incoming connections (only outgoing connections allowed on clients).
-            // Also disables connecting to another client.
+            // Also implicitly disables connecting to another client.
             clientHost.PreventConnections(true);
+
+            // TODO: REMOVE TEMPORARY LOGIN TOKEN ADDS
+            OutgoingTokens["127.0.0.1:7777"] = "0f8fad5bd9cb469fa16570867728950e";
+            OutgoingTokens["127.0.0.1:7778"] = "0f8fad5bd9cb469fa16570867728950e";
+            OutgoingTokens["127.0.0.1:7779"] = "0f8fad5bd9cb469fa16570867728950e";
         }
 
         /// <summary>
@@ -305,9 +310,9 @@ namespace ENetServer.Network
             }
 
             // Verify not trying to connect to a Host already connected to.
-            foreach (var peerDat in Servers)
+            foreach (var peerData in Servers)
             {
-                if (peerDat.Value.Peer.IP == ip && peerDat.Value.Peer.Port == port)
+                if (peerData.Value.Peer.IP == ip && peerData.Value.Peer.Port == port)
                 {
                     Console.WriteLine("[ERROR] Attempted to connect to an existing Connection. Aborting.");
                     return;
@@ -316,19 +321,23 @@ namespace ENetServer.Network
 
             // Create Address object with IP and Port from NetSendObject.
             Address remoteAddress = new();
-            remoteAddress.SetIP(netSendObject.PeerParams.IP);
-            remoteAddress.Port = netSendObject.PeerParams.Port;
+            remoteAddress.SetIP(ip);
+            remoteAddress.Port = port;
 
-            // Queue connect to remote address.
             try
             {
+                // Get checksum from login token before connect attempt (get value, do not remove).
+                string key = NetStatics.GetAddressString(ip, port);
+                if (!OutgoingTokens.TryGetValue(key, out string? token)) return;
+                uint checksum = NetStatics.CalculateChecksum(token);
+
+                // Actually make connection request, which returns null or throws an exception on failure.
                 Peer? pendingPeer = clientHost?.Connect(remoteAddress, 2, netSendObject.Data);
                 if (pendingPeer != null)
                 {
                     pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
 
                     // Add this peer to pending peers.
-                    string key = NetStatics.GetAddressString(netSendObject.PeerParams.IP, netSendObject.PeerParams.Port);
                     PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
                     InitiatedPeers[key] = peerData;
                 }
@@ -560,7 +569,8 @@ namespace ENetServer.Network
             if (InitiatedPeers.ContainsKey(key))
             {
                 // Client must immediately send login token as raw data to server to validate connection.
-                string token = "0f8fad5bd9cb469fa16570867728950e";
+                if (!OutgoingTokens.TryGetValue(key, out string? token)) return;    // MUST Remove() LATER
+                //if (!OutgoingTokens.Remove(key, out string? token)) return;
                 token = NetStatics.FormatStringForSend(token);
 
                 // Create packet with login token and send.

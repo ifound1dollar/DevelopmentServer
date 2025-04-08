@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ENetServer.Network
 {
-    public struct BlacklistData
+    public record BlacklistData
     {
         public string IP { get; }
         public ushort Port { get; }
@@ -38,7 +38,7 @@ namespace ENetServer.Network
         ///  been reached.
         /// </summary>
         /// <returns> Whether the Peer referred to by this BlacklistData object is still blacklisted. </returns>
-        public readonly bool IsCurrentlyBlacklisted()
+        public bool IsCurrentlyBlacklisted()
         {
             // Returns < 0 if first is before second, meaning it is before expiration time.
             bool isBlacklisted = DateTime.Compare(DateTime.UtcNow, Expiration) < 0;
