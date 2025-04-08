@@ -11,13 +11,14 @@ namespace ENetServer.Network
     {
         public enum CustomState { None, Initiated, AwaitingToken, AwaitingAck, Connected, Disconnected }
 
-        public Peer Peer { get; }
+        private Peer _peer;
+        public ref Peer Peer => ref _peer;  // Use non-auto property to return Peer by reference.
         public DateTime ConnectTime { get; }
         public CustomState State { get; set; }
 
         public PeerData(Peer peer, CustomState state)
         {
-            Peer = peer;
+            _peer = peer;
             State = state;
 
             ConnectTime = DateTime.UtcNow;
