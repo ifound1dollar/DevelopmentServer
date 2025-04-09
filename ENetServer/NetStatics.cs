@@ -272,6 +272,8 @@ namespace ENetServer
         /// 1101 | Server login token validation error
         /// 1200 | Client validation ACK error
         /// 1201 | Server validation ACK error
+        /// 1300 | Client missing login token to send
+        /// 1301 | Server missing login token to send
         /// 1500 | Master server connection error
         /// 2000 | Disallowed new connection
         /// 2500 | Disconnect on message from unknown Peer

@@ -1,5 +1,4 @@
 ﻿using ENet;
-using ENetServer.Network;
 using ENetServer.NetObjects;
 using System;
 using System.Collections.Concurrent;
@@ -11,6 +10,7 @@ using static ENetServer.NetStatics;
 using System.IO.Pipes;
 using System.Buffers;
 using System.Collections;
+using ENetServer.Network.Data;
 
 namespace ENetServer.Network
 {
@@ -46,7 +46,7 @@ namespace ENetServer.Network
         private Dictionary<uint, PeerData> Servers { get; } = new();
         private Dictionary<string, PeerData> InitiatedPeers { get; } = new();
 
-        private Dictionary<string, string> OutgoingTokens { get; } = new(); // for login tokens we send
+        private Validator Validator { get; } = new Validator(isServer: false);
 
         internal Address GetAddress()
         {
@@ -86,11 +86,6 @@ namespace ENetServer.Network
             // Prevent incoming connections (only outgoing connections allowed on clients).
             // Also implicitly disables connecting to another client.
             clientHost.PreventConnections(true);
-
-            // TODO: REMOVE TEMPORARY LOGIN TOKEN ADDS
-            OutgoingTokens["127.0.0.1:7777"] = "0f8fad5bd9cb469fa16570867728950e";
-            OutgoingTokens["127.0.0.1:7778"] = "0f8fad5bd9cb469fa16570867728950e";
-            OutgoingTokens["127.0.0.1:7779"] = "0f8fad5bd9cb469fa16570867728950e";
         }
 
         /// <summary>
@@ -326,20 +321,20 @@ namespace ENetServer.Network
 
             try
             {
-                // Get checksum from login token before connect attempt (get value, do not remove).
-                string key = NetStatics.GetAddressString(ip, port);
-                if (!OutgoingTokens.TryGetValue(key, out string? token)) return;
-                uint checksum = NetStatics.CalculateChecksum(token);
-
-                // Actually make connection request, which returns null or throws an exception on failure.
-                Peer? pendingPeer = clientHost?.Connect(remoteAddress, 2, netSendObject.Data);
-                if (pendingPeer != null)
+                // Get checksum from login token before connect attempt.
+                if (Validator.GetChecksumForConnectRequest(ip, port, out uint checksum))
                 {
-                    pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
+                    // Actually make connection request, which returns null OR throws an exception on failure.
+                    Peer? pendingPeer = clientHost?.Connect(remoteAddress, 2, checksum);
+                    if (pendingPeer != null)
+                    {
+                        pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
 
-                    // Add this peer to pending peers.
-                    PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
-                    InitiatedPeers[key] = peerData;
+                        // Add this peer to pending peers.
+                        string key = NetStatics.GetAddressString(ip, port);
+                        PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
+                        InitiatedPeers[key] = peerData;
+                    }
                 }
             }
             catch (InvalidOperationException ex)
@@ -479,16 +474,18 @@ namespace ENetServer.Network
 
         private void HandleConnectEvent(ref Event connectEvent)
         {
+            Peer peer = connectEvent.Peer;
+            string key = NetStatics.GetAddressString(connectEvent.Peer.IP, connectEvent.Peer.Port);
+
             // If new connection is from another client, immediately disconnect that Peer.
             // OR if new connection is not in InitiatedPeers (meaning this client did not initiate), disconnect.
-            string key = NetStatics.GetAddressString(connectEvent.Peer.IP, connectEvent.Peer.Port);
             if (connectEvent.Peer.Port >= ClientPortMin || !InitiatedPeers.ContainsKey(key))
             {
-                connectEvent.Peer.Disconnect(2000u);    // Data of 2000u indicates invalid new connection.
+                DisconnectOnUnknownNewConnection(ref peer);
             }
 
             // Else new connection was from a server, so handle new server connection.
-            ProcessIncomingConnection(ref connectEvent);
+            ProcessIncomingConnection(ref peer, key);
         }
 
         private void HandleDisconnectEvent(ref Event disconnectEvent)
@@ -560,31 +557,29 @@ namespace ENetServer.Network
 
         #region Connect processing
 
-        private void ProcessIncomingConnection(ref Event connectEvent)
+        private void ProcessIncomingConnection(ref Peer peer, string key)
         {
-            Peer peer = connectEvent.Peer;
-            string key = NetStatics.GetAddressString(peer.IP, peer.Port);
-
             // New connection is guaranteed to have been self-initiated (clients disallow incoming connections).
             if (InitiatedPeers.ContainsKey(key))
             {
-                // Client must immediately send login token as raw data to server to validate connection.
-                if (!OutgoingTokens.TryGetValue(key, out string? token)) return;    // MUST Remove() LATER
-                //if (!OutgoingTokens.Remove(key, out string? token)) return;
-                token = NetStatics.FormatStringForSend(token);
-
-                // Create packet with login token and send.
-                Packet packet = default;
-                packet.Create(NetStatics.GetBytes(token));
-                peer.Send(0, ref packet);
-
-                return;
+                if (Validator.GetTokenForOutgoingConnect(peer.IP, peer.Port, out string? token))
+                {
+                    // Create packet with login token and send.
+                    Packet packet = default;
+                    packet.Create(NetStatics.GetBytes(token));
+                    peer.Send(0, ref packet);
+                }
+                else
+                {
+                    // If cannot find login token, disconnect immediately and log error.
+                    DisconnectOnMissingLoginToken(ref peer);
+                }
             }
-
-            // Else new connection from unknown Peer, so disconnect immediately.
-            Console.WriteLine("[ERROR] Rejecting new connection from {0}:{1}, Reason: Unknown Peer",
-                peer.IP, peer.Port);
-            peer.DisconnectNow(2000u);  // Data 2000u is for generic disallowed connection
+            else
+            {
+                // Else new connection from unknown Peer, so disconnect immediately.
+                DisconnectOnUnknownNewConnection(ref peer);
+            }
         }
 
         #endregion
@@ -606,7 +601,7 @@ namespace ENetServer.Network
             // If Peer does not exist in InitiatedPeers, then received message from unknown connection.
             if (!InitiatedPeers.TryGetValue(key, out PeerData? peerData))
             {
-                DisconnectOnUnknownConnection(ref peer);
+                DisconnectOnMessageFromUnknownPeer(ref peer);
                 return;
             }
 
@@ -615,7 +610,7 @@ namespace ENetServer.Network
             str = NetStatics.FormatStringFromReceive(str);
 
             // If validation response contains expected data, add Peer to map (now valid)
-            if (str.Equals("Login token validation successful."))   // TODO: PERFORM ACTUAL ACK MESSAGE VALIDATION
+            if (Validator.CompareValidationAck(str))
             {
                 // Remove from InitiatedPeers, and add to fully-connected map.
                 InitiatedPeers.Remove(key);
@@ -623,7 +618,7 @@ namespace ENetServer.Network
                 Servers[peer.ID] = peerData;
 
                 // Create packet with response ACK and send.
-                string ack = NetStatics.FormatStringForSend("Validation ACK received successfully.");
+                string ack = Validator.GetAckResponseString();
                 Packet packet = default;
                 packet.Create(NetStatics.GetBytes(ack));
                 peer.Send(0, ref packet);
@@ -653,7 +648,21 @@ namespace ENetServer.Network
             peer.DisconnectNow(1200u);
         }
 
-        private static void DisconnectOnUnknownConnection(ref Peer peer)
+        private static void DisconnectOnMissingLoginToken(ref Peer peer)
+        {
+            Console.WriteLine("[ERROR] Aborting new connection attempt to {0}:{1}, Reason: Failed to locate login token",
+                        peer.IP, peer.Port);
+            peer.DisconnectNow(1300u);  // Always from client
+        }
+
+        private static void DisconnectOnUnknownNewConnection(ref Peer peer)
+        {
+            Console.WriteLine("[ERROR] Rejecting new connection from {0}:{1}, Reason: Disallowed Peer",
+                    peer.IP, peer.Port);
+            peer.DisconnectNow(2000u);  // Data 2000u is for generic disallowed connection
+        }
+
+        private static void DisconnectOnMessageFromUnknownPeer(ref Peer peer)
         {
             Console.WriteLine("[ERROR] Force disconnecting Peer at {0}:{1}, Reason: Message received from unknown Peer",
                 peer.IP, peer.Port);

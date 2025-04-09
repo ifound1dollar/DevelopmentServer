@@ -4,15 +4,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetServer.Network
+namespace ENetServer.Network.Data
 {
     public record ValidationData
     {
         public string IP { get; }
         public ushort Port { get; }
-        private DateTime Expiration { get; }
-        private uint Checksum { get; }
-        private string LoginToken { get; }
+        public DateTime Expiration { get; }
+        public uint Checksum { get; }
+        public string LoginToken { get; }
 
         public ValidationData(string ip, ushort port, string loginToken)
         {
@@ -20,7 +20,7 @@ namespace ENetServer.Network
             Port = port;
             LoginToken = loginToken;
 
-            Checksum = NetStatics.CalculateChecksum(loginToken);
+            Checksum = CalculateChecksum(loginToken);
             Expiration = DateTime.UtcNow.AddMinutes(5);
         }
 
@@ -41,7 +41,7 @@ namespace ENetServer.Network
             }
 
             // Else return whether the checksums match.
-            return (Checksum == inChecksum);
+            return Checksum == inChecksum;
         }
 
         /// <summary>
@@ -60,6 +60,26 @@ namespace ENetServer.Network
 
             // Else return whether the login tokens match.
             return LoginToken == inLoginToken;
+        }
+
+        /// <summary>
+        /// Calculates an unsigned 32-bit checksum from a string of arbitrary size, using the
+        ///  Knuth hashing algorithm.
+        /// </summary>
+        /// <param name="read"> The string to hash. </param>
+        /// <returns> The passed-in string as a non-cryptographically-secure uint hash. </returns>
+        private static uint CalculateChecksum(string read)
+        {
+            // See accepted comment here for details on Knuth hash:
+            //  https://stackoverflow.com/questions/9545619/a-fast-hash-function-for-string-in-c-sharp
+
+            uint hashedValue = 59;  // Should use a sufficiently large prime number in the future.
+            for (int i = 0; i < read.Length; i++)
+            {
+                hashedValue += read[i];
+                hashedValue *= 59;
+            }
+            return hashedValue;
         }
     }
 }

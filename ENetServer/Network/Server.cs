@@ -1,7 +1,7 @@
 ﻿using ENet;
 using ENetServer.NetObjects;
 using ENetServer.NetObjects.DataObjects;
-using ENetServer.Network;
+using ENetServer.Network.Data;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
@@ -44,10 +44,9 @@ namespace ENetServer.Network
         private Dictionary<string, PeerData> PendingPeers { get; } = new();
 
         private Peer? MasterServer { get; set; } = null;
-        private Dictionary<string, BlacklistData> BlacklistMap { get; } = new();
-        private Dictionary<string, ValidationData> ValidationMap { get; } = new();
+        private Validator Validator { get; } = new Validator(isServer: true);
 
-        private Dictionary<string, string> OutgoingTokens { get; } = new(); // for login tokens we send
+        
 
         internal Address GetAddress()
         {
@@ -77,6 +76,11 @@ namespace ENetServer.Network
             this.channelLimit = channelLimit;
         }
 
+        internal void SetMasterServerParameters(string ip, ushort port)
+        {
+
+        }
+
         /// <summary>
         /// Starts up server to begin listening on the designated port.
         /// </summary>
@@ -91,20 +95,6 @@ namespace ENetServer.Network
             //  EVENT DISPATCHED ONCE LOOP STARTS
             // IF WAIT FOR CONNECTION HERE: remove master server connect check from connect receive
             //  method. ELSE IF NOT WAITING FOR CONNECTION, keep master server connect check.
-
-            // TODO: REMOVE TEMPORARY POPULATE VALIDATION MAP WITH DATA
-            ValidationMap["127.0.0.1:8888"] = new ValidationData("127.0.0.1", 8888, "0f8fad5bd9cb469fa16570867728950e");
-            ValidationMap["127.0.0.1:8889"] = new ValidationData("127.0.0.1", 8889, "0f8fad5bd9cb469fa16570867728950e");
-            ValidationMap["127.0.0.1:8890"] = new ValidationData("127.0.0.1", 8890, "0f8fad5bd9cb469fa16570867728950e");
-
-            ValidationMap["127.0.0.1:7777"] = new ValidationData("127.0.0.1", 7777, "1f8fad5bd9cb469fa16570867728950e");
-            ValidationMap["127.0.0.1:7778"] = new ValidationData("127.0.0.1", 7778, "1f8fad5bd9cb469fa16570867728950e");
-            ValidationMap["127.0.0.1:7779"] = new ValidationData("127.0.0.1", 7779, "1f8fad5bd9cb469fa16570867728950e");
-
-            // TODO: REMOVE TEMPORARY LOGIN TOKEN ADDS
-            OutgoingTokens["127.0.0.1:7777"] = "1f8fad5bd9cb469fa16570867728950e";
-            OutgoingTokens["127.0.0.1:7778"] = "1f8fad5bd9cb469fa16570867728950e";
-            OutgoingTokens["127.0.0.1:7779"] = "1f8fad5bd9cb469fa16570867728950e";
         }
 
         /// <summary>
@@ -345,20 +335,20 @@ namespace ENetServer.Network
 
             try
             {
-                // Get checksum from login token before connect attempt (get value, do not remove).
-                string key = NetStatics.GetAddressString(ip, port);
-                if (!OutgoingTokens.TryGetValue(key, out string? token)) return;
-                uint checksum = NetStatics.CalculateChecksum(token);
-
-                // Actually make connection request, which returns null or throws an exception on failure.
-                Peer? pendingPeer = serverHost?.Connect(remoteAddress, 2, checksum);
-                if (pendingPeer != null)
+                // Get checksum from login token before connect attempt.
+                if (Validator.GetChecksumForConnectRequest(ip, port, out uint checksum))
                 {
-                    pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
-                    
-                    // Add this peer to pending peers.
-                    PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
-                    PendingPeers[key] = peerData;
+                    // Actually make connection request, which returns null OR throws an exception on failure.
+                    Peer? pendingPeer = serverHost?.Connect(remoteAddress, 2, checksum);
+                    if (pendingPeer != null)
+                    {
+                        pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
+
+                        // Add this peer to pending peers.
+                        string key = NetStatics.GetAddressString(ip, port);
+                        PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
+                        PendingPeers[key] = peerData;
+                    }
                 }
             }
             catch (InvalidOperationException ex)
@@ -560,15 +550,11 @@ namespace ENetServer.Network
             string key = NetStatics.GetAddressString(peer.IP, peer.Port);
 
             // FIRST, verify that new connection is not currently blacklisted.
-            if (BlacklistMap.TryGetValue(key, out BlacklistData? blacklistData))
+            if (Validator.IsPeerBlacklisted(peer.IP, peer.Port))
             {
                 // If connected client is still blacklisted, immediately disconnect.
-                if (blacklistData.IsCurrentlyBlacklisted())
-                {
-                    DisconnectOnBlacklist(ref peer);
-
-                    return;
-                }
+                DisconnectOnBlacklist(ref peer);
+                return;
             }
 
             // Else, handle new connection.
@@ -756,41 +742,38 @@ namespace ENetServer.Network
             // If this Peer not in PendingPeers, then is totally new connection so compare checksum.
             if (!PendingPeers.TryGetValue(key, out PeerData? peerData))
             {
-                // If new connection passes valid checksum, make preliminary connection.
-                if (ValidationMap.TryGetValue(key, out ValidationData? validationData))
+                if (Validator.CompareChecksum(peer.IP, peer.Port, inChecksum))
                 {
-                    if (validationData.CompareChecksum(inChecksum))
-                    {
-                        // Add new Peer to PendingPeers with AwaitingToken state.
-                        PeerData data = new(peer, PeerData.CustomState.AwaitingToken);
-                        PendingPeers.Add(key, data);
-
-                        return;
-                    }
+                    // If passes valid checksum, add new Peer to PendingPeers with AwaitingToken state.
+                    PeerData data = new(peer, PeerData.CustomState.AwaitingToken);
+                    PendingPeers.Add(key, data);
                 }
-
-                // If either of the above branches fail, blacklist and force disconnect immediately.
-                BlacklistPeer(ref peer, key);
-                DisconnectOnChecksumFail(ref peer, isServer: isServer);
-
-                return;
+                else
+                {
+                    // Else failed checksum, so blacklist and force disconnect immediately.
+                    Validator.BlacklistPeer(peer.IP, peer.Port);
+                    DisconnectOnChecksumFail(ref peer, isServer: isServer);
+                }
             }
-
             // Else is in PendingPeers, and if Initiated by this server, immediately send full login token.
-            if (peerData.State == PeerData.CustomState.Initiated)
+            else if (peerData.State == PeerData.CustomState.Initiated)
             {
-                // Initial connection successful, so must send over login token immediately.
-                if (!OutgoingTokens.TryGetValue(key, out string? token)) return;
-                //if (!OutgoingTokens.Remove(key, out string? token)) return;
-                token = NetStatics.FormatStringForSend(token);
-
-                // Create packet with login token and send.
-                Packet packet = default;
-                packet.Create(NetStatics.GetBytes(token));
-                peer.Send(0, ref packet);
+                if (Validator.GetTokenForOutgoingConnect(peer.IP, peer.Port, out string? token))
+                {
+                    // Create packet with login token and send.
+                    Packet packet = default;
+                    packet.Create(NetStatics.GetBytes(token));
+                    peer.Send(0, ref packet);
+                }
+                else
+                {
+                    // If cannot find login token, disconnect immediately and log error.
+                    DisconnectOnMissingLoginToken(ref peer);
+                }
             }
 
             // A new connection that exists in PendingPeers WITHOUT Initiated state should never happen.
+            Console.WriteLine("[UNEXPECTED] New connection found in PendingPeers without Initiated state.");
         }
 
         #endregion
@@ -824,8 +807,8 @@ namespace ENetServer.Network
             // If Peer does not exist in PendingPeers, then received message from unknown connection.
             if (!PendingPeers.TryGetValue(key, out PeerData? peerData))
             {
-                BlacklistPeer(ref peer, key);
-                DisconnectOnUnknownConnection(ref peer);
+                Validator.BlacklistPeer(peer.IP, peer.Port);
+                DisconnectOnMessageFromUnknownPeer(ref peer);
                 return;
             }
 
@@ -868,7 +851,7 @@ namespace ENetServer.Network
             Peer peer = peerData.Peer;
 
             // If validation response contains expected ACK data, add Peer to maps (now valid)
-            if (responseString.Equals("Login token validation successful."))    // TODO: COMPARE ACTUAL VALIDATION ACK MESSAGE
+            if (Validator.CompareValidationAck(responseString))
             {
                 // Add Peer to fully-connected maps, removing from PendingPeers and setting State.
                 PendingPeers.Remove(key);
@@ -877,7 +860,7 @@ namespace ENetServer.Network
                 AllConnected[peer.ID] = peerData;
 
                 // Create packet with response ACK and send.
-                string ack = NetStatics.FormatStringForSend("Validation ACK received successfully.");
+                string ack = Validator.GetAckResponseString();
                 Packet packet = default;
                 packet.Create(NetStatics.GetBytes(ack));
                 peerData.Peer.Send(0, ref packet);
@@ -913,30 +896,24 @@ namespace ENetServer.Network
             Peer peer = peerData.Peer;
 
             // If new connection contains valid login token, complete connection.
-            if (ValidationMap.TryGetValue(key, out ValidationData? validationData))
+            if (Validator.CompareLoginToken(peer.IP, peer.Port, tokenString))
             {
-                if (validationData.CompareLoginToken(tokenString))
-                {
-                    // Update PeerData object's state to PendingAck (from PendingToken).
-                    peerData.State = PeerData.CustomState.AwaitingAck;
+                // Update PeerData object's state to PendingAck (from PendingToken).
+                peerData.State = PeerData.CustomState.AwaitingAck;
 
-                    // Create packet with validation ACK and send.
-                    string ack = NetStatics.FormatStringForSend("Login token validation successful.");
-                    Packet packet = default;
-                    packet.Create(NetStatics.GetBytes(ack));
-                    peer.Send(0, ref packet);
-
-                    // Remove Peer from Blacklist and Validation maps now that connection is made.
-                    BlacklistMap.Remove(key);
-                    //ValidationMap.Remove(key);
-
-                    return;
-                }
+                // Create packet with validation ACK and send.
+                string ack = Validator.GetValidationAckString();
+                Packet packet = default;
+                packet.Create(NetStatics.GetBytes(ack));
+                peer.Send(0, ref packet);
+                return;
             }
-
-            // If either of the above branches fail, blacklist and force disconnect immediately.
-            BlacklistPeer(ref peer, key);
-            DisconnectOnLoginTokenFail(ref peer, isServer);
+            else
+            {
+                // Else login token validation failed, so blacklist and force disconnect immediately.
+                Validator.BlacklistPeer(peer.IP, peer.Port);
+                DisconnectOnLoginTokenFail(ref peer, isServer);
+            }
         }
 
         private void ProcessFinalAckResponse(PeerData peerData, string key, string ackString, bool isServer)
@@ -952,7 +929,7 @@ namespace ENetServer.Network
             Peer peer = peerData.Peer;
 
             // If return ACK response contains expected ACK data, add Peer to maps (now valid)
-            if (ackString.Equals("Validation ACK received successfully."))  // TODO: COMPARE ACTUAL RETURN ACK MESSAGE
+            if (Validator.CompareAckResponse(ackString))
             {
                 // Add Peer to fully-connected maps, removing from PendingPeers and setting State.
                 PendingPeers.Remove(key);
@@ -1013,25 +990,20 @@ namespace ENetServer.Network
             peer.DisconnectNow(data);
         }
 
-        private static void DisconnectOnUnknownConnection(ref Peer peer)
+        private static void DisconnectOnMissingLoginToken(ref Peer peer)
+        {
+            Console.WriteLine("[ERROR] Aborting new connection attempt to {0}:{1}, Reason: Failed to locate login token",
+                        peer.IP, peer.Port);
+            peer.DisconnectNow(1301u);  // Always from server
+        }
+
+        private static void DisconnectOnMessageFromUnknownPeer(ref Peer peer)
         {
             Console.WriteLine("[ERROR] Force disconnecting Peer at {0}:{1}, Reason: Message received from unknown Peer",
                 peer.IP, peer.Port);
 
             // Data uint 2500u means message received from unknown Peer.
             peer.DisconnectNow(2500u);
-        }
-
-        private void BlacklistPeer(ref Peer peer, string key)
-        {
-            if (BlacklistMap.TryGetValue(key, out BlacklistData? blacklistData))
-            {
-                blacklistData.Reblacklist();
-            }
-            else
-            {
-                BlacklistMap[key] = new BlacklistData(peer.IP, peer.Port);
-            }
         }
     }
 }
