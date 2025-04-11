@@ -13,6 +13,7 @@ namespace ENetServer.NetObjects.DataObjects
         None = 0,
         Text = 1,
         Transform = 2,
+        ConnectData = 254,
         TEST = 255
     }
     // NOTE: Adding a new DataType requires a few operations:
@@ -86,6 +87,11 @@ namespace ENetServer.NetObjects.DataObjects
                 case DataType.Transform:
                     {
                         gameDataObject = TransformDataObject.Factory.CreateFromDeserialize(bytes, length);
+                        break;
+                    }
+                case DataType.ConnectData:
+                    {
+                        // TODO: CREATE CONNECTDATAOBJECT
                         break;
                     }
                 case DataType.TEST:

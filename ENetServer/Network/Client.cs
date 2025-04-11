@@ -200,7 +200,7 @@ namespace ENetServer.Network
                                 if (netSendObject.PeerParams.HostType == HostType.None)
                                 {
                                     NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromMessage(
-                                        netSendObject.PeerParams, netSendObject.Bytes, netSendObject.Length);
+                                        netSendObject.PeerParams, 0, netSendObject.Bytes, netSendObject.Length);
                                     netRecvQueue.Enqueue(netRecvObject);
                                 }
                                 // Else if has a HostType, enqueue message to one.
@@ -322,19 +322,19 @@ namespace ENetServer.Network
             try
             {
                 // Get checksum from login token before connect attempt.
-                if (Validator.GetChecksumForConnectRequest(ip, port, out uint checksum))
-                {
-                    // Actually make connection request, which returns null OR throws an exception on failure.
-                    Peer? pendingPeer = clientHost?.Connect(remoteAddress, 2, checksum);
-                    if (pendingPeer != null)
-                    {
-                        pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
+                uint checksum = NetStatics.CalculateChecksum(netSendObject.PeerParams.LoginToken);
 
-                        // Add this peer to pending peers.
-                        string key = NetStatics.GetAddressString(ip, port);
-                        PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
-                        InitiatedPeers[key] = peerData;
-                    }
+                // Actually make connection request, which returns null OR throws an exception on failure.
+                Peer? pendingPeer = clientHost?.Connect(remoteAddress, 2, checksum);
+                if (pendingPeer != null)
+                {
+                    pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
+
+                    // Add this peer to pending peers.
+                    string key = NetStatics.GetAddressString(ip, port);
+                    PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
+                    peerData.SetLoginToken(netSendObject.PeerParams.LoginToken);
+                    InitiatedPeers[key] = peerData;
                 }
             }
             catch (InvalidOperationException ex)
@@ -509,7 +509,7 @@ namespace ENetServer.Network
                 // Enqueue disconnect object with disconnected peer's data for use by other threads.
                 PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
-                    peerParams, data);
+                    peerParams, disconnectEvent.ChannelID, data);
                 netRecvQueue.Enqueue(dataObject);
             }
         }
@@ -524,7 +524,7 @@ namespace ENetServer.Network
                 // Enqueue timeout object with timed-out peer's data for use by other threads.
                 PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
-                    peerParams, 400u);
+                    peerParams, timeoutEvent.ChannelID, 400u);
                 netRecvQueue.Enqueue(dataObject);
             }
         }
@@ -543,10 +543,10 @@ namespace ENetServer.Network
             {
                 ProcessValidationAck(ref peer, bytes, length);
             }
-            // Else is in map (validated), so enqueue as normal message.
+            // Else is in map (validated), so process as valid message.
             else
             {
-                ProcessRegularMessage(ref peer, bytes, length);
+                ProcessRegularMessage(ref peer, receiveEvent.ChannelID, bytes, length);
             }
 
             // Always dispose packet after handling receive, even if did not enqueue NetRecvObject.
@@ -560,9 +560,10 @@ namespace ENetServer.Network
         private void ProcessIncomingConnection(ref Peer peer, string key)
         {
             // New connection is guaranteed to have been self-initiated (clients disallow incoming connections).
-            if (InitiatedPeers.ContainsKey(key))
+            if (InitiatedPeers.TryGetValue(key, out PeerData? peerData))
             {
-                if (Validator.GetTokenForOutgoingConnect(peer.IP, peer.Port, out string? token))
+                string token = peerData.GetLoginToken();
+                if (!string.IsNullOrEmpty(token))
                 {
                     // Create packet with login token and send.
                     Packet packet = default;
@@ -586,11 +587,11 @@ namespace ENetServer.Network
 
         #region Message processing
 
-        private void ProcessRegularMessage(ref Peer peer, byte[] bytes, int length)
+        private void ProcessRegularMessage(ref Peer peer, byte channelId, byte[] bytes, int length)
         {
             // Enqueue NetRecvObject with this peer's data.
             PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
-            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerParams, bytes, length);
+            NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(peerParams, channelId, bytes, length);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -626,7 +627,7 @@ namespace ENetServer.Network
                 // Enqueue connect object with new peer's Connection for use by other threads.
                 PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                    peerParams, 101u);
+                    peerParams, 0, 101u);
                 netRecvQueue.Enqueue(dataObject);
 
                 return;

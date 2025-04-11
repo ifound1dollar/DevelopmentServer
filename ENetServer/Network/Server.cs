@@ -212,7 +212,7 @@ namespace ENetServer.Network
                                 if (netSendObject.PeerParams.HostType == HostType.None)
                                 {
                                     NetRecvObject netRecvObject = NetRecvObject.Factory.CreateFromMessage(
-                                        netSendObject.PeerParams, netSendObject.Bytes, netSendObject.Length);
+                                        netSendObject.PeerParams, 0, netSendObject.Bytes, netSendObject.Length);
                                     netRecvQueue.Enqueue(netRecvObject);
                                 }
                                 // Else if has a HostType, enqueue message to one.
@@ -336,19 +336,19 @@ namespace ENetServer.Network
             try
             {
                 // Get checksum from login token before connect attempt.
-                if (Validator.GetChecksumForConnectRequest(ip, port, out uint checksum))
+                uint checksum = NetStatics.CalculateChecksum(netSendObject.PeerParams.LoginToken);
+                
+                // Actually make connection request, which returns null OR throws an exception on failure.
+                Peer? pendingPeer = serverHost?.Connect(remoteAddress, 2, checksum);
+                if (pendingPeer != null)
                 {
-                    // Actually make connection request, which returns null OR throws an exception on failure.
-                    Peer? pendingPeer = serverHost?.Connect(remoteAddress, 2, checksum);
-                    if (pendingPeer != null)
-                    {
-                        pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
+                    pendingPeer.Value.Timeout(32, 5000, 10000); //32 and 5000 are default, last param default is 30000 (30s)
 
-                        // Add this peer to pending peers.
-                        string key = NetStatics.GetAddressString(ip, port);
-                        PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
-                        PendingPeers[key] = peerData;
-                    }
+                    // Add this peer to pending peers.
+                    string key = NetStatics.GetAddressString(ip, port);
+                    PeerData peerData = new((Peer)pendingPeer, PeerData.CustomState.Initiated);
+                    peerData.SetLoginToken(netSendObject.PeerParams.LoginToken);
+                    PendingPeers[key] = peerData;
                 }
             }
             catch (InvalidOperationException ex)
@@ -599,7 +599,7 @@ namespace ENetServer.Network
                     // Enqueue disconnect object with disconnected peer's data for use by other threads.
                     PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
                     NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
-                        peerParams, data);
+                        peerParams, disconnectEvent.ChannelID, data);
                     netRecvQueue.Enqueue(dataObject);
                 }
             }
@@ -614,7 +614,7 @@ namespace ENetServer.Network
                     // Enqueue disconnect object with disconnected peer's data for use by other threads.
                     PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                     NetRecvObject dataObject = NetRecvObject.Factory.CreateFromDisconnect(
-                        peerParams, data);
+                        peerParams, disconnectEvent.ChannelID, data);
                     netRecvQueue.Enqueue(dataObject);
                 }
             }
@@ -640,7 +640,7 @@ namespace ENetServer.Network
                     // Enqueue disconnect object with disconnected peer's data for use by other threads.
                     PeerParams peerParams = new(HostType.Client, peer.ID, peer.IP, peer.Port);
                     NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
-                        peerParams, 400u);
+                        peerParams, timeoutEvent.ChannelID, 400u);
                     netRecvQueue.Enqueue(dataObject);
                 }
             }
@@ -652,7 +652,7 @@ namespace ENetServer.Network
                     // Enqueue disconnect object with disconnected peer's data for use by other threads.
                     PeerParams peerParams = new(HostType.Server, peer.ID, peer.IP, peer.Port);
                     NetRecvObject dataObject = NetRecvObject.Factory.CreateFromTimeout(
-                        peerParams, 400u);
+                        peerParams, timeoutEvent.ChannelID, 400u);
                     netRecvQueue.Enqueue(dataObject);
                 }
             }
@@ -685,7 +685,7 @@ namespace ENetServer.Network
                 else
                 {
                     // Else is in map (validated), so enqueue as normal message.
-                    ProcessRegularMessage(ref peer, bytes, length, isServer: false);
+                    ProcessRegularMessage(ref peer, receiveEvent.ChannelID, bytes, length, isServer: false);
                 }
             }
             else if (peer.Port >= NetStatics.ServerPortMin) // Server ports between 7777 and 8887.
@@ -698,7 +698,7 @@ namespace ENetServer.Network
                 else
                 {
                     // Else is in map (validated), so enqueue as normal message.
-                    ProcessRegularMessage(ref peer, bytes, length, isServer: true);
+                    ProcessRegularMessage(ref peer, receiveEvent.ChannelID, bytes, length, isServer: true);
                 }
             }
             else if (peer.Port == 7776)                     // Master Server port should be 7776.
@@ -758,7 +758,8 @@ namespace ENetServer.Network
             // Else is in PendingPeers, and if Initiated by this server, immediately send full login token.
             else if (peerData.State == PeerData.CustomState.Initiated)
             {
-                if (Validator.GetTokenForOutgoingConnect(peer.IP, peer.Port, out string? token))
+                string token = peerData.GetLoginToken();
+                if (!string.IsNullOrEmpty(token))
                 {
                     // Create packet with login token and send.
                     Packet packet = default;
@@ -771,9 +772,11 @@ namespace ENetServer.Network
                     DisconnectOnMissingLoginToken(ref peer);
                 }
             }
-
-            // A new connection that exists in PendingPeers WITHOUT Initiated state should never happen.
-            Console.WriteLine("[UNEXPECTED] New connection found in PendingPeers without Initiated state.");
+            else
+            {
+                // A new connection that exists in PendingPeers WITHOUT Initiated state should never happen.
+                Console.WriteLine("[UNEXPECTED] New connection found in PendingPeers without Initiated state.");
+            }
         }
 
         #endregion
@@ -785,14 +788,14 @@ namespace ENetServer.Network
             // READ DATA IN EXPECTED STRUCTURE AND ADD TO BOTH HASH SETS
         }
 
-        private void ProcessRegularMessage(ref Peer peer, byte[] bytes, int length, bool isServer)
+        private void ProcessRegularMessage(ref Peer peer, byte channelId, byte[] bytes, int length, bool isServer)
         {
             HostType hostType = (isServer) ? HostType.Server : HostType.Client;
 
             // Enqueue NetRecvObject with this peer's data.
             PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
             NetRecvObject dataObject = NetRecvObject.Factory.CreateFromMessage(
-                peerParams, bytes, length);
+                peerParams, channelId, bytes, length);
             netRecvQueue.Enqueue(dataObject);
         }
 
@@ -868,7 +871,7 @@ namespace ENetServer.Network
                 // Validation has fully completed, so enqueue successful connect object.
                 PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                    peerParams, 101u);
+                    peerParams, 0, 101u);
                 netRecvQueue.Enqueue(dataObject);
 
                 return;
@@ -940,7 +943,7 @@ namespace ENetServer.Network
                 // Validation has fully completed, so enqueue successful connect object.
                 PeerParams peerParams = new(hostType, peer.ID, peer.IP, peer.Port);
                 NetRecvObject dataObject = NetRecvObject.Factory.CreateFromConnect(
-                    peerParams, 100u);
+                    peerParams, 0, 100u);
                 netRecvQueue.Enqueue(dataObject);
 
                 return;

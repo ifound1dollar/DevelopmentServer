@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static ENetServer.NetStatics;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ENetServer.NetObjects
 {
@@ -22,6 +23,13 @@ namespace ENetServer.NetObjects
         public uint Data { get; }
         public GameDataObject? GameDataObject { get; }
         
+
+        private GameSendObject(SendType sendType, PeerParams peerParams)
+        {
+            SendType = sendType;
+            PeerParams = peerParams;
+            // GameDataObject remains null and Data remains 0.
+        }
 
         private GameSendObject(SendType sendType, PeerParams peerParams, uint data)
         {
@@ -60,12 +68,12 @@ namespace ENetServer.NetObjects
             /// </summary>
             /// <param name="ip"> IP address of peer attempting to connect to. </param>
             /// <param name="port"> Port of peer attempting to connect to. </param>
-            /// <param name="data"> Optional data uint to send with connect request. </param>
+            /// <param name="token"> Login Token to send to the Peer to connect to. </param>
             /// <returns> The newly created 'connect one' GameSendObject. </returns>
-            public static GameSendObject CreateConnectOne(string ip, ushort port, uint data)
+            public static GameSendObject CreateConnectOne(string ip, ushort port, string token)
             {
-                PeerParams peerParams = new(ip, port);
-                return new GameSendObject(SendType.Connect_One, peerParams, data);
+                PeerParams peerParams = new(ip, port, token);
+                return new GameSendObject(SendType.Connect_One, peerParams);
             }
 
             /// <summary>

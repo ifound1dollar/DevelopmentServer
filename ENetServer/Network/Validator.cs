@@ -13,11 +13,10 @@ namespace ENetServer.Network
     {
         private Dictionary<string, BlacklistData> BlacklistMap { get; } = new();
         private Dictionary<string, ValidationData> ValidationMap { get; } = new();
-        private Dictionary<string, ValidationData> OutgoingTokens { get; } = new(); // for login tokens we send
 
         public Validator(bool isServer)
         {
-            // TODO: REMOVE TEMPORARY POPULATE MAPS WITH DATA
+            // TODO: REMOVE TEMPORARY POPULATE MAP WITH DATA
             if (isServer)
             {
                 // Client sends token starting with 0.
@@ -29,19 +28,7 @@ namespace ENetServer.Network
                 ValidationMap["127.0.0.1:7777"] = new ValidationData("127.0.0.1", 7777, "1f8fad5bd9cb469fa16570867728950e");
                 ValidationMap["127.0.0.1:7778"] = new ValidationData("127.0.0.1", 7778, "1f8fad5bd9cb469fa16570867728950e");
                 ValidationMap["127.0.0.1:7779"] = new ValidationData("127.0.0.1", 7779, "1f8fad5bd9cb469fa16570867728950e");
-
-                OutgoingTokens["127.0.0.1:7777"] = new ValidationData("127.0.0.1", 7777, "1f8fad5bd9cb469fa16570867728950e");
-                OutgoingTokens["127.0.0.1:7778"] = new ValidationData("127.0.0.1", 7778, "1f8fad5bd9cb469fa16570867728950e");
-                OutgoingTokens["127.0.0.1:7779"] = new ValidationData("127.0.0.1", 7779, "1f8fad5bd9cb469fa16570867728950e");
             }
-            else
-            {
-                // Client sends token starting with 0.
-                OutgoingTokens["127.0.0.1:7777"] = new ValidationData("127.0.0.1", 8888, "0f8fad5bd9cb469fa16570867728950e");
-                OutgoingTokens["127.0.0.1:7778"] = new ValidationData("127.0.0.1", 8889, "0f8fad5bd9cb469fa16570867728950e");
-                OutgoingTokens["127.0.0.1:7779"] = new ValidationData("127.0.0.1", 8890, "0f8fad5bd9cb469fa16570867728950e");
-            }
-            
         }
 
 
@@ -53,41 +40,7 @@ namespace ENetServer.Network
             return true;
         }
 
-        public bool AddOutgoingToken(string ip, ushort port, string token)
-        {
-            string key = NetStatics.GetAddressString(ip, port);
-            OutgoingTokens[key] = new ValidationData(ip, port, token);
-            return true;
-        }
 
-
-
-        public bool GetChecksumForConnectRequest(string ip, ushort port, out uint checksum)
-        {
-            string key = NetStatics.GetAddressString(ip, port);
-            if (OutgoingTokens.TryGetValue(key, out ValidationData? validationData))
-            {
-                checksum = validationData.Checksum;
-                return true;
-            }
-
-            checksum = 0u;
-            return false;
-        }
-
-        public bool GetTokenForOutgoingConnect(string ip, ushort port, [NotNullWhen(true)] out string? token)
-        {
-            string key = NetStatics.GetAddressString(ip, port);
-            if (OutgoingTokens.TryGetValue(key, out ValidationData? validationData))
-            //if (OutgoingTokens.Remove(key, out ValidationData? validationData))   // USE Remove() LATER
-            {
-                token = validationData.LoginToken;
-                return true;
-            }
-
-            token = string.Empty;
-            return false;
-        }
 
         public string GetValidationAckString()
         {

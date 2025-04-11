@@ -18,21 +18,24 @@ namespace ENetServer.NetObjects
     {
         public RecvType RecvType { get; }
         public PeerParams PeerParams { get; }
+        public byte ChannelID { get; }
         public uint Data { get; }
         public GameDataObject? GameDataObject { get; }
 
-        public GameRecvObject(RecvType recvType, PeerParams peerParams, uint data)
+        public GameRecvObject(RecvType recvType, PeerParams peerParams, byte channelId, uint data)
         {
             RecvType = recvType;
             PeerParams = peerParams;
+            ChannelID = channelId;
             Data = data;
             // GameDataObject remains null.
         }
 
-        public GameRecvObject(RecvType recvType, PeerParams peerParams, GameDataObject gameDataObject)
+        public GameRecvObject(RecvType recvType, PeerParams peerParams, byte channelId, GameDataObject gameDataObject)
         {
             RecvType = recvType;
             PeerParams = peerParams;
+            ChannelID = channelId;
             GameDataObject = gameDataObject;
             // Data remains 0.
         }

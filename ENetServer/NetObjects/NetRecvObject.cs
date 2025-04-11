@@ -18,22 +18,25 @@ namespace ENetServer.NetObjects
     {
         internal RecvType RecvType { get; }
         internal PeerParams PeerParams { get; }
+        internal byte ChannelID { get; }
         internal uint Data { get; }
         internal byte[]? Bytes { get; }
         internal int Length { get; }
 
-        private NetRecvObject(RecvType recvType, PeerParams peerParams, uint data)
+        private NetRecvObject(RecvType recvType, PeerParams peerParams, byte channelId, uint data)
         {
             RecvType = recvType;
             PeerParams = peerParams;
+            ChannelID = channelId;
             Data = data;
             // Bytes remains null and Length remains 0.
         }
 
-        private NetRecvObject(RecvType recvType, PeerParams peerParams, byte[]? bytes, int length)
+        private NetRecvObject(RecvType recvType, PeerParams peerParams, byte channelId, byte[]? bytes, int length)
         {
             RecvType = recvType;
             PeerParams = peerParams;
+            ChannelID = channelId;
             Bytes = bytes;
             Length = length;
             // Data remains 0.
@@ -61,11 +64,12 @@ namespace ENetServer.NetObjects
             ///  peer information (no byte[] payload).
             /// </summary>
             /// <param name="peerParams"> PeerParams object corresponding to peer that just connected. </param>
+            /// <param name="channelId"> ID of channel this message was received on. </param>
             /// <param name="data"> Data uint from connect event. </param>
             /// <returns> The newly created 'connect' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromConnect(PeerParams peerParams, uint data)
+            internal static NetRecvObject CreateFromConnect(PeerParams peerParams, byte channelId, uint data)
             {
-                return new NetRecvObject(RecvType.Connect, peerParams, data);
+                return new NetRecvObject(RecvType.Connect, peerParams, channelId, data);
             }
 
             /// <summary>
@@ -73,11 +77,12 @@ namespace ENetServer.NetObjects
             ///  only peer information (no byte[] payload).
             /// </summary>
             /// <param name="peerParams"> PeerParams object corresponding to peer that just disconnected. </param>
+            /// <param name="channelId"> ID of channel this message was received on. </param>
             /// <param name="data"> Data uint from disconnect event. </param>
             /// <returns> The newly created 'disconnect' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromDisconnect(PeerParams peerParams, uint data)
+            internal static NetRecvObject CreateFromDisconnect(PeerParams peerParams, byte channelId, uint data)
             {
-                return new NetRecvObject(RecvType.Disconnect, peerParams, data);
+                return new NetRecvObject(RecvType.Disconnect, peerParams, channelId, data);
             }
 
             /// <summary>
@@ -85,11 +90,12 @@ namespace ENetServer.NetObjects
             ///  only peer information (no byte[] payload).
             /// </summary>
             /// <param name="peerParams"> PeerParams object corresponding to peer that just timed out. </param>
+            /// <param name="channelId"> ID of channel this message was received on. </param>
             /// <param name="data"> Data uint from timeout event. </param>
             /// <returns> The newly created 'timeout' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromTimeout(PeerParams peerParams, uint data)
+            internal static NetRecvObject CreateFromTimeout(PeerParams peerParams, byte channelId, uint data)
             {
-                return new NetRecvObject(RecvType.Timeout, peerParams, data);
+                return new NetRecvObject(RecvType.Timeout, peerParams, channelId, data);
             }
 
             /// <summary>
@@ -97,12 +103,13 @@ namespace ENetServer.NetObjects
             ///  peer information and byte[] payload of incoming message packet.
             /// </summary>
             /// <param name="peerParams"> PeerParams object corresponding to peer that message was received from. </param>
+            /// <param name="channelId"> ID of channel this message was received on. </param>
             /// <param name="bytes"> The incoming message packet payload as byte[]. </param>
             /// <param name="length"> The length of the actual data in the byte[] payload. </param>
             /// <returns> The newly created 'message' NetRecvObject. </returns>
-            internal static NetRecvObject CreateFromMessage(PeerParams peerParams, byte[] bytes, int length)
+            internal static NetRecvObject CreateFromMessage(PeerParams peerParams, byte channelId, byte[] bytes, int length)
             {
-                return new NetRecvObject(RecvType.Message, peerParams, bytes, length);
+                return new NetRecvObject(RecvType.Message, peerParams, channelId, bytes, length);
             }
         }
     }

@@ -18,6 +18,7 @@ namespace ENetServer.NetObjects
         public uint[] IDArray { get; }
         public string IP { get; }
         public ushort Port { get; }
+        public string LoginToken { get; }
 
 
 
@@ -26,10 +27,11 @@ namespace ENetServer.NetObjects
         /// </summary>
         /// <param name="ip"> IP address of peer attempting to connect to. </param>
         /// <param name="port"> Port of peer attempting to connect to. </param>
-        internal PeerParams(string ip, ushort port)
+        internal PeerParams(string ip, ushort port, string loginToken)
         {
             IP = ip;
             Port = port;
+            LoginToken = loginToken;
 
             // Initialize unused reference types.
             IDArray = [];
@@ -46,6 +48,7 @@ namespace ENetServer.NetObjects
             // Initialize unused reference types.
             IP = string.Empty;
             IDArray = [];
+            LoginToken = string.Empty;
         }
 
         internal PeerParams(HostType hostType, uint id, string ip, ushort port)
@@ -57,6 +60,7 @@ namespace ENetServer.NetObjects
 
             // Initialize unused reference types.
             IDArray = [];
+            LoginToken = string.Empty;
         }
 
         /// <summary>
@@ -70,6 +74,7 @@ namespace ENetServer.NetObjects
             // Initialize unused reference types.
             IP = string.Empty;
             IDArray = [];
+            LoginToken = string.Empty;
         }
 
         /// <summary>
@@ -85,6 +90,7 @@ namespace ENetServer.NetObjects
             // Initialize unused reference types.
             IP = string.Empty;
             IDArray = [];
+            LoginToken = string.Empty;
         }
 
         /// <summary>
@@ -97,6 +103,7 @@ namespace ENetServer.NetObjects
 
             // Initialize unused reference types.
             IP = string.Empty;
+            LoginToken = string.Empty;
         }
     }
 }

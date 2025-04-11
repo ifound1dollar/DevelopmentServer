@@ -12,6 +12,7 @@ namespace ENetServer.Network.Data
         public enum CustomState { None, Initiated, AwaitingToken, AwaitingAck, Connected, Disconnected }
 
         private Peer _peer;
+        private string loginToken;
 
         public ref Peer Peer => ref _peer;      // Use non-auto property to return Peer by reference.
         public DateTime ConnectTime { get; }
@@ -23,6 +24,25 @@ namespace ENetServer.Network.Data
             State = state;
 
             ConnectTime = DateTime.UtcNow;
+
+            loginToken = string.Empty;
+        }
+
+
+
+        public void SetLoginToken(string loginToken)
+        {
+            this.loginToken = loginToken;
+        }
+
+        public string GetLoginToken()
+        {
+            return loginToken;
+        }
+
+        public void ResetLoginToken()
+        {
+            loginToken = string.Empty;
         }
     }
 }

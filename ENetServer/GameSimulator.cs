@@ -11,6 +11,7 @@ using System.Collections.Concurrent;
 using ENetServer.NetObjects.DataObjects;
 using System.Diagnostics.Metrics;
 using System.ComponentModel;
+using ENetServer.Network.Data;
 
 namespace ENetServer
 {
@@ -28,6 +29,7 @@ namespace ENetServer
         public ConcurrentDictionary<uint, Connection> Servers { get; } = new();
         public ConcurrentDictionary<uint, Connection> Connected { get; } = new();
 
+
         public GameSimulatorWorker()
         {
             thread = new(DoFixedIntervalTick);
@@ -42,6 +44,7 @@ namespace ENetServer
         {
             thread.Start();
             Console.WriteLine("[STARTUP] GameSimulator thread started.");
+            
         }
 
         /// <summary>

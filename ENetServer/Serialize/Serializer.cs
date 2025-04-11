@@ -122,8 +122,8 @@ namespace ENetServer.Serialize
                     case RecvType.Timeout:
                         {
                             // Simply pass incoming non-message object to main/game thread to be handled there.
-                            GameRecvObject gameRecvObject = new(
-                                netRecvObject.RecvType, netRecvObject.PeerParams, netRecvObject.Data);
+                            GameRecvObject gameRecvObject = new(netRecvObject.RecvType,
+                                netRecvObject.PeerParams, netRecvObject.ChannelID, netRecvObject.Data);
                             gameRecvQueue.Enqueue(gameRecvObject);
 
                             break;
@@ -138,7 +138,8 @@ namespace ENetServer.Serialize
                                 out GameDataObject? gameDataObject))
                             {
                                 // If deserialization successful, create GameRecvObject and enqueue to game.
-                                GameRecvObject gameRecvObject = new(netRecvObject.RecvType, netRecvObject.PeerParams, gameDataObject);
+                                GameRecvObject gameRecvObject = new(netRecvObject.RecvType,
+                                    netRecvObject.PeerParams, netRecvObject.ChannelID, gameDataObject);
                                 gameRecvQueue.Enqueue(gameRecvObject);
                             }
                             else

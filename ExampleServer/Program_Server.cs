@@ -3,6 +3,7 @@ using ENetServer.NetObjects;
 using ENetServer.NetObjects.DataObjects;
 using ENetServer.Network;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using static ENetServer.NetStatics;
 
 namespace ServerExample
@@ -10,6 +11,13 @@ namespace ServerExample
     internal class Program_Server
     {
         private static GameSimulatorWorker GameSimulator { get; set; } = new();
+        private static Dictionary<string, string> OutgoingTokens { get; } = new()
+        {
+            // Server sends token starting with 1.
+            { "127.0.0.1:7777", "1f8fad5bd9cb469fa16570867728950e" },
+            { "127.0.0.1:7778", "1f8fad5bd9cb469fa16570867728950e" },
+            { "127.0.0.1:7779", "1f8fad5bd9cb469fa16570867728950e" }
+        };
 
         static void Main(string[] args)
         {
@@ -173,9 +181,12 @@ namespace ServerExample
                 }
             }
 
-            // Data uint is optional here, network thread handles sending checksum.
-            GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, 0u);
-            NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            // Get login token from map, then enqueue connect attempt.
+            if (GetTokenForOutgoingConnect(ip, port, out string? token))
+            {
+                GameSendObject gameSendObject = GameSendObject.Factory.CreateConnectOne(ip, port, token);
+                NetworkManager.Instance.EnqueueGameSendObject(gameSendObject);
+            }
         }
 
         /// <summary>
@@ -344,6 +355,23 @@ namespace ServerExample
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode =
                             System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
             System.GC.Collect();
+        }
+
+
+
+
+
+        public static bool GetTokenForOutgoingConnect(string ip, ushort port, [NotNullWhen(true)] out string? token)
+        {
+            string key = NetStatics.GetAddressString(ip, port);
+            if (OutgoingTokens.TryGetValue(key, out token))
+            //if (OutgoingTokens.Remove(key, out token))   // USE Remove() LATER
+            {
+                return true;
+            }
+
+            token = string.Empty;
+            return false;
         }
     }
 }
