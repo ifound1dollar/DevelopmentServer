@@ -1,6 +1,6 @@
 # Development Server
 
-Exploratory multithreaded C# networking solution built around the ENet networking library.
+Exploratory multithreaded C# networking solution built around the ENet networking library. C#/.NET implementation of ENet provided by GitHub user nxrighthere: https://github.com/nxrighthere/ENet-CSharp
 
 ---
 
