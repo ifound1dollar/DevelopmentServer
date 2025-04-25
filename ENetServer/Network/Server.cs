@@ -436,6 +436,10 @@ namespace ENetServer.Network
             // Create packet from passed-in byte[], only copying bytes for the specified length.
             Packet packet = default;
             packet.Create(netSendObject.Bytes, netSendObject.Length);
+            // TODO: CREATE PACKET WITH PACKET FLAGS, MUST USE BITMASKING TO PacketFlags VARIABLE
+            //  THEN PASS AS ARGUMENT TO CREATE METHOD
+            // CREATE A NEW METHOD TO GENERATE PACKET FLAGS, SHOULD ALSO SET FRAGMENTED FLAG IF
+            //  GREATER THAN 500 BYTES PAYLOAD (probably other stuff too)
 
             // Only if a peer with this ID is found.
             if (AllConnected.TryGetValue(netSendObject.PeerParams.ID, out PeerData? peerData))

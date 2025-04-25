@@ -19,6 +19,7 @@ namespace ENetServer.NetObjects
     {
         internal SendType SendType { get; }
         internal PeerParams PeerParams { get; }
+        internal bool Reliable { get; }
         internal uint Data { get; }
         internal byte[]? Bytes { get; }
         internal int Length { get; }

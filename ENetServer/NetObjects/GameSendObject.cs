@@ -20,6 +20,7 @@ namespace ENetServer.NetObjects
     {
         public SendType SendType { get; }
         public PeerParams PeerParams { get; }
+        public bool Reliable { get; }
         public uint Data { get; }
         public GameDataObject? GameDataObject { get; }
         
